@@ -1,6 +1,6 @@
 // Network-first cache of the app shell so MyTube opens offline.
-const CACHE = 'mytube-v13';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.json', 'icon.svg'];
+const CACHE = 'mytube-v14';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'remote.js', 'version.json', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

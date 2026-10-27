@@ -42,6 +42,15 @@ const ICONS = {
   cast: 'M3 8V5h18v14h-7M3 12a8 8 0 0 1 8 8M3 16a4 4 0 0 1 4 4M3 20h.01',
   zap: 'M13 2 4 14h7l-1 8 9-12h-7z',
   playline: 'M7 4.5v15l12-7.5z',
+  fill: 'M7 17V7h10M7 7l10 10',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
+  eq: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  pip: 'M3 5h18v14H3zM12 12h7v5h-7z',
+  volume: 'M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  skip: 'M5 5l9 7-9 7zM16 5h3v14h-3z',
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
+  check: 'M5 12l5 5 9-10',
   sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   feed: 'M4 7h16v13H4zM8 4h8M12 10.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
@@ -95,13 +104,28 @@ function defaultState() {
     stats: {},     // YouTube view/like counts, cached
     plays: {},     // how many times you've opened each video
     comments: {},  // your own comments, per video
-    settings: { theme: 'dark', autoplay: true },
+    searches: [],  // your YouTube search history
+    settings: {
+      theme: 'dark', autoplay: true, discover: 30, bgPlay: true, apiKey: '',
+      sponsor: { on: true, cats: ['sponsor', 'selfpromo', 'interaction'] },
+      eq: { preset: 'flat', bass: 0, voice: 0, treble: 0, norm: false },
+    },
   };
 }
 
 let state;
 try { state = Object.assign(defaultState(), JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
 catch { state = defaultState(); }
+// Settings added in later versions get their defaults.
+state.settings = Object.assign(defaultState().settings, state.settings);
+// Videos you only opened from search aren't kept once nothing points at them.
+{
+  const keep = new Set([...state.history.map((h) => h.id), ...state.liked, ...state.later, ...state.playlists.flatMap((p) => p.items), ...Object.keys(state.comments)]);
+  for (const v of Object.values(state.videos)) {
+    if (v.unsaved && !keep.has(v.id)) { delete state.videos[v.id]; delete state.progress[v.id]; delete state.stats[v.id]; }
+  }
+}
+Remote.setKey(state.settings.apiKey);
 
 let saveTimer = 0;
 function save(now) {
@@ -181,7 +205,8 @@ function profileAvatar(size, p = state.profile) {
 }
 // Your uploads show your own profile picture as the channel avatar.
 const chName = (v) => v.local ? myName(v.channel) : esc(v.channel);
-function channelAvatar(v, size) { return v.local ? profileAvatar(size) : avatar(v.channel, size); }
+function channelAvatar(v, size) { return v.local ? profileAvatar(size) : avatar(v.channel, size, v.avatar); }
+const when = (v) => v.uploaded || ago(v.addedAt);
 
 function ago(t) {
   const s = (Date.now() - t) / 1000;
@@ -377,7 +402,8 @@ document.addEventListener('pointerdown', (e) => {
   dot.animate([{ transform: 'scale(0)', opacity: 0.32 }, { transform: 'scale(1)', opacity: 0 }], { duration: 600, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => wrap.remove();
 }, { passive: true });
 
-const allVideos = () => Object.values(state.videos).sort((a, b) => b.addedAt - a.addedAt);
+// Your library. Videos opened from search stay out of it until you save them.
+const allVideos = () => Object.values(state.videos).filter((v) => !v.unsaved).sort((a, b) => b.addedAt - a.addedAt);
 const isSub = (ch) => state.subs.some((s) => s.name === ch);
 const watched = (id) => state.history.some((h) => h.id === id);
 const toggleIn = (arr, id) => { const i = arr.indexOf(id); if (i >= 0) arr.splice(i, 1); else arr.unshift(id); return i < 0; };
@@ -400,6 +426,16 @@ const likesShort = (id) => {
   const total = (n || 0) + (state.liked.includes(id) && !v?.local ? 1 : 0) + (v?.local && state.liked.includes(id) ? 1 : 0);
   return total ? fmtCount(total) : '';
 };
+const dislikesShort = (id) => {
+  const n = state.stats[id]?.dislikes, mine = state.disliked.includes(id) ? 1 : 0;
+  return (n || 0) + mine ? fmtCount((n || 0) + mine) : '';
+};
+function likeRatio(id) {
+  const st = state.stats[id];
+  if (st?.likes == null || st?.dislikes == null) return null;
+  const l = st.likes + (state.liked.includes(id) ? 1 : 0), d = st.dislikes + (state.disliked.includes(id) ? 1 : 0);
+  return l + d ? Math.round((l / (l + d)) * 100) : null;
+}
 const likesLong = (id) => { const n = likesOf(id); return n == null ? '' : `${fmtCount(n)} like${n === 1 ? '' : 's'}`; };
 
 const statsQueue = new Set();
@@ -422,7 +458,7 @@ async function pumpStats() {
         const r = await fetch(`https://returnyoutubedislikeapi.com/votes?videoId=${id}`);
         if (!r.ok) throw new Error(r.status);
         const j = await r.json();
-        state.stats[id] = { views: j.viewCount, likes: j.likes, at: Date.now() };
+        state.stats[id] = { views: j.viewCount, likes: j.likes, dislikes: j.dislikes, at: Date.now() };
         paintStats(id, true);
       } catch {
         // Remember the failure so we don't retry on every render.
@@ -438,6 +474,9 @@ function paintStats(id, animate) {
   document.querySelectorAll(`[data-views-long="${id}"]`).forEach((el) => countUp(el, viewsOf(id), viewsLong(id), animate));
   document.querySelectorAll(`[data-likes-long="${id}"]`).forEach((el) => countUp(el, likesOf(id), likesLong(id), animate));
   document.querySelectorAll(`[data-likes-short="${id}"]`).forEach((el) => { el.textContent = likesShort(id); });
+  document.querySelectorAll(`[data-dislikes-short="${id}"]`).forEach((el) => { el.textContent = dislikesShort(id); });
+  document.querySelectorAll(`[data-ratio="${id}"]`).forEach((el) => { const r = likeRatio(id); el.style.setProperty('--r', (r ?? 0) + '%'); el.classList.toggle('hidden', r == null); });
+  document.querySelectorAll(`[data-ratio-text="${id}"]`).forEach((el) => { el.textContent = ratioText(id); });
 }
 // Rolls a number up from zero, then settles on the formatted label.
 function countUp(el, n, finalText, animate) {
@@ -575,7 +614,7 @@ function bigCard(v, k) {
       <a href="#channel/${encodeURIComponent(v.channel)}">${channelAvatar(v, 36)}</a>
       <a class="text" data-play="${v.id}" data-ctx="${k}" href="#">
         <div class="title">${esc(v.title)}</div>
-        <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${ago(v.addedAt)}</span></div>
+        <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${when(v)}</span></div>
       </a>
       <button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button>
     </div></div>`;
@@ -584,14 +623,14 @@ function smallCard(v, k, wide) {
   return `<div class="hcard ${wide ? 'wide' : ''}">
     ${thumbBox(v, k)}
     <div class="meta"><a class="text" data-play="${v.id}" data-ctx="${k}" href="#">
-      <div class="title">${esc(v.title)}</div><div class="sub"><span>${chName(v)}</span>${wide ? viewsSpan(v.id) + `<span>${ago(v.addedAt)}</span>` : ''}</div></a>
+      <div class="title">${esc(v.title)}</div><div class="sub"><span>${chName(v)}</span>${wide ? viewsSpan(v.id) + `<span>${when(v)}</span>` : ''}</div></a>
       <button class="more" data-menu="${v.id}" aria-label="More">${icon('more')}</button></div></div>`;
 }
 function listRow(v, k, extra, editable) {
-  return `<div class="lrow">
+  return `<div class="lrow" data-id="${v.id}" data-q="${esc((v.title + ' ' + v.channel).toLowerCase())}">
     ${thumbBox(v, k)}
     <a class="text" data-play="${v.id}" data-ctx="${k}" href="#"><div class="title">${esc(v.title)}</div>
-      <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${extra ?? ago(v.addedAt)}</span></div></a>
+      <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${extra ?? when(v)}</span></div></a>
     ${editable ? `<a class="more" href="#edit/${v.id}" aria-label="Edit video">${icon('edit')}</a>` : `<button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button>`}</div>`;
 }
 function shortTile(v, width = 150) {
@@ -606,6 +645,208 @@ function empty(ic, text, btn) {
   return `<div class="empty">${icon(ic)}<div>${text}</div>${btn || ''}</div>`;
 }
 const addBtnHtml = '<button class="btn" data-action="add">Add a video</button>';
+
+// ---------------------------------------------------------------- real YouTube results
+// Results are plain objects until you open one; then it becomes a video entry
+// (marked unsaved, so it stays out of your library until you save it).
+const remoteById = new Map();
+let remoteLists = {};
+function rlist(items) { const k = 'r' + ctxSeq++; remoteLists[k] = items; return k; }
+const rThumb = (id) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+function ensureVideo(r) {
+  let v = state.videos[r.id];
+  if (!v) {
+    v = state.videos[r.id] = {
+      id: r.id, title: r.title, channel: r.channel || 'YouTube', channelUrl: r.channelUrl || '', avatar: r.avatar || '',
+      category: '', short: !!r.short, uploaded: r.uploaded || '', addedAt: Date.now(), unsaved: true,
+    };
+    if (r.views != null && !state.stats[r.id]) state.stats[r.id] = { views: r.views, at: 0 };
+    if (r.duration && !state.progress[r.id]) state.progress[r.id] = { t: 0, d: r.duration };
+  }
+  return v;
+}
+function saveToLibrary(id) {
+  const v = state.videos[id];
+  if (!v?.unsaved) return;
+  delete v.unsaved;
+  v.addedAt = Date.now();
+  save();
+  toast('Saved to your library');
+}
+const rMeta = (r) => [r.views != null ? `${fmtCount(r.views)} views` : '', r.uploaded].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('');
+function remoteCard(r, k, badge = '') {
+  remoteById.set(r.id, r);
+  return `<div class="card">
+    <a class="thumb" data-rplay="${r.id}" data-rk="${k}" href="#"><img loading="lazy" src="${rThumb(r.id)}" alt="">${badge ? `<span class="badge left">${badge}</span>` : ''}${r.duration ? `<span class="badge">${fmtTime(r.duration)}</span>` : ''}${progressBar(r.id)}</a>
+    <div class="meta">${avatar(r.channel, 36, r.avatar)}
+      <a class="text" data-rplay="${r.id}" data-rk="${k}" href="#"><div class="title">${esc(r.title)}</div><div class="sub"><span>${esc(r.channel)}</span>${rMeta(r)}</div></a>
+      <button class="more" data-rmenu="${r.id}" aria-label="More">${icon('moreV')}</button></div></div>`;
+}
+function remoteShort(r, k) {
+  remoteById.set(r.id, r);
+  return `<div class="rshort-card">
+    <a class="rshort" data-rplay="${r.id}" data-rk="${k}" href="#"><img loading="lazy" src="${rThumb(r.id)}" alt=""><span class="rshort-title">${esc(r.title)}</span></a>
+    <button class="rshort-more" data-rmenu="${r.id}" aria-label="More">${icon('more')}</button>
+    <div class="rshort-meta">${avatar(r.channel, 36, r.avatar)}<div><div class="name">${esc(r.channel)}</div><div class="sub">${[r.views != null ? fmtCount(r.views) + ' views' : '', r.uploaded].filter(Boolean).map(esc).join(' · ')}</div></div></div>
+  </div>`;
+}
+let shortsQueue = [];
+function playRemote(id, k) {
+  const r = remoteById.get(id);
+  if (!r) return;
+  const list = remoteLists[k] || [r];
+  ensureVideo(r);
+  if (r.short) {
+    shortsQueue = list.filter((x) => x.short).map((x) => ensureVideo(x).id);
+    if (playerMode === 'full') setPlayerMode('mini');
+    location.hash = '#shorts/' + r.id;
+    return;
+  }
+  const ids = list.filter((x) => !x.short).map((x) => ensureVideo(x).id);
+  openVideo(id, ids.includes(id) ? ids : [id, ...ids]);
+}
+
+// ---------------------------------------------------------------- search
+const searchCache = new Map();
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+function addSearchHistory(q, thumbId) {
+  state.searches = [{ q, thumb: thumbId || state.searches.find((x) => x.q === q)?.thumb || '', at: Date.now() }, ...state.searches.filter((x) => x.q.toLowerCase() !== q.toLowerCase())].slice(0, 30);
+  save();
+}
+function runSearch(q) {
+  if (searchCache.get(q)?.items || searchCache.get(q)?.loading) return;
+  searchCache.set(q, { loading: true });
+  const hash = location.hash;
+  Remote.search(q).then((items) => {
+    searchCache.set(q, { items });
+    addSearchHistory(q, items[0]?.id);
+  }).catch(() => {
+    searchCache.set(q, { error: true });
+    addSearchHistory(q);
+  }).finally(() => { if (location.hash === hash && !$('#sheet-root .scrim')) rerender(); });
+}
+function searchBar(q) {
+  return `<div class="searchbar"><button class="icon-btn" data-action="back" aria-label="Back">${icon('back')}</button>
+    <form class="search-field" id="search-form" role="search" action="#">
+      <input id="search-input" type="search" placeholder="Search YouTube" value="${esc(q)}" autocomplete="off" autocapitalize="off" enterkeyhint="search">
+      ${q ? `<button type="button" class="search-clear" data-action="search-clear" aria-label="Clear">${icon('close')}</button>` : ''}
+    </form>
+    ${SpeechRec ? `<button class="icon-btn mic-btn" data-action="voice" aria-label="Search with your voice">${icon('mic')}</button>` : ''}
+  </div><div class="suggest-panel hidden" id="search-suggest"></div>`;
+}
+function renderSearch(q, filter) {
+  const links = findLinks(q);
+  if (!q) {
+    const rows = state.searches.map((x) => `<div class="sh-row">
+        <a class="sh-main" href="#search/${encodeURIComponent(x.q)}">${icon('history')}<span class="sh-q">${esc(x.q)}</span>${x.thumb ? `<img class="sh-thumb" loading="lazy" src="${rThumb(x.thumb)}" alt="">` : ''}</a>
+        <button class="sh-fill" data-fill="${esc(x.q)}" aria-label="Edit “${esc(x.q)}”">${icon('fill')}</button></div>`).join('');
+    return searchBar('') + (rows ? `<div class="sh-list">${rows}</div><button class="sh-clear" data-action="search-history-clear">Clear search history</button>`
+      : empty('search', 'Search YouTube for videos, Shorts and music.<br>You can also paste a YouTube link to save it.'));
+  }
+  const f = filter || 'All';
+  const lib = allVideos().filter((v) => [v.title, v.channel, v.category, v.description, ...(v.tags || []).map((t) => '#' + t)].join(' ').toLowerCase().includes(q.toLowerCase()));
+  const res = searchCache.get(q) || {};
+  let items = res.items || [];
+  if (f === 'Videos') items = items.filter((r) => !r.short);
+  if (f === 'Shorts') items = items.filter((r) => r.short);
+  if (f === 'Unwatched') items = items.filter((r) => !watched(r.id));
+  const vids = items.filter((r) => !r.short), shorts = items.filter((r) => r.short);
+  const vk = rlist(vids), sk = rlist(shorts);
+  const grid = (list) => list.length ? `<div class="rshort-grid">${list.map((r) => remoteShort(r, sk)).join('')}</div>` : '';
+  let body = '';
+  if (f === 'Saved') {
+    const k = ctx(lib.map((v) => v.id));
+    body = lib.length ? lib.map((v) => listRow(v, k)).join('') : empty('search', 'Nothing in your library matches.');
+  } else if (res.loading) {
+    body = '<div class="feed">' + Array.from({ length: 3 }, () => '<div class="card skel"><div class="thumb"></div><div class="meta"><span class="avatar av-36"></span><div class="text"><div class="skel-line"></div><div class="skel-line short"></div></div></div></div>').join('') + '</div>';
+  } else if (res.error) {
+    body = `<div class="empty">${icon('search')}<div>Couldn't reach YouTube search right now.<br>Check your connection and try again${Remote.hasKey() ? '' : ', or add a YouTube API key in Settings for steadier search'}.</div>
+      <button class="btn" data-action="search-retry" data-q="${esc(q)}">Try again</button></div>`;
+  } else if (f === 'Shorts') {
+    body = grid(shorts) || empty('shorts', 'No Shorts found.');
+  } else {
+    const parts = vids.map((r) => remoteCard(r, vk));
+    if (f === 'All' && shorts.length) parts.splice(Math.min(2, parts.length), 0, `</div><div class="section-title">${icon('shorts')} Shorts</div>${grid(shorts.slice(0, 4))}<div class="feed">`);
+    body = parts.length ? `<div class="feed">${parts.join('')}</div>` : empty('search', 'No results.');
+  }
+  const libTop = f === 'All' && lib.length ? `<div class="section-title" style="font-size:16px">From your library</div>${lib.slice(0, 3).map((v) => listRow(v, ctx(lib.map((x) => x.id)))).join('')}` : '';
+  return searchBar(q) + `
+    <div class="chips">${['All', 'Videos', 'Shorts', 'Unwatched', 'Saved'].map((c) => `<button class="chip ${c === f ? 'active' : ''}" data-sfilter="${c}">${c}</button>`).join('')}</div>
+    ${links.length ? `<button class="lib-item" style="width:100%;text-align:left" data-action="add-from-search">${icon('plus')}<div class="text"><div class="title">Save ${links.length} video${links.length > 1 ? 's' : ''} from link</div></div></button>` : ''}
+    ${libTop}${body}`;
+}
+function setupSearch(q) {
+  const form = $('#search-form'), inp = $('#search-input'), panel = $('#search-suggest');
+  if (!q) inp.focus();
+  if (q && !findLinks(q).length) runSearch(q);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = inp.value.trim();
+    if (!v) return;
+    inp.blur();
+    if (v === q) { panel.classList.add('hidden'); return; }
+    location.hash = '#search/' + encodeURIComponent(v);
+  });
+  let timer = 0, seq = 0;
+  inp.addEventListener('input', () => {
+    clearTimeout(timer);
+    const v = inp.value.trim();
+    if (!v || v === q) { panel.classList.add('hidden'); return; }
+    timer = setTimeout(async () => {
+      const mine = ++seq;
+      const past = state.searches.filter((x) => x.q.toLowerCase().startsWith(v.toLowerCase())).slice(0, 3).map((x) => x.q);
+      const row = (t, ic) => `<div class="sh-row"><a class="sh-main" href="#search/${encodeURIComponent(t)}">${icon(ic)}<span class="sh-q">${esc(t)}</span></a><button class="sh-fill" data-fill="${esc(t)}" aria-label="Edit">${icon('fill')}</button></div>`;
+      const draw = (list) => { panel.innerHTML = [...past.map((t) => row(t, 'history')), ...list.filter((t) => !past.includes(t)).map((t) => row(t, 'search'))].join('') || row(v, 'search'); panel.classList.remove('hidden'); };
+      draw([]);
+      try { const list = await Remote.suggestions(v); if (mine === seq) draw(list); } catch { /* keep what we have */ }
+    }, 200);
+  });
+}
+function voiceSearch(btn) {
+  const rec = new SpeechRec();
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  const inp = $('#search-input');
+  btn.classList.add('listening');
+  rec.onresult = (e) => {
+    const text = [...e.results].map((r) => r[0].transcript).join('');
+    inp.value = text;
+    if (e.results[e.results.length - 1].isFinal && text.trim()) location.hash = '#search/' + encodeURIComponent(text.trim());
+  };
+  rec.onend = () => btn.classList.remove('listening');
+  rec.onerror = () => { btn.classList.remove('listening'); toast('Voice search needs microphone access'); };
+  try { rec.start(); } catch { btn.classList.remove('listening'); }
+}
+
+// ---------------------------------------------------------------- discovery for Home
+// Recommendations related to what you watched lately (or trending), mixed into
+// Home by the Familiar ↔ New slider.
+const detailsCache = new Map();
+function loadDetails(id) {
+  if (!detailsCache.has(id)) {
+    detailsCache.set(id, Remote.details(id).then((d) => { detailsReady.set(id, d || { related: [] }); return d; })
+      .catch(() => { detailsReady.set(id, { related: [] }); return null; }));
+  }
+  return detailsCache.get(id);
+}
+let discover = { key: null, items: [], at: 0, loading: false };
+function loadDiscover() {
+  const seeds = [...new Set(state.history.map((h) => state.videos[h.id]).filter((v) => v && !v.local).map((v) => v.id))].slice(0, 3);
+  const key = seeds.join(',') || 'trending';
+  if (discover.loading || (discover.key === key && Date.now() - discover.at < 30 * 60e3)) return;
+  discover.loading = true;
+  (async () => {
+    let items = [];
+    const details = await Promise.all(seeds.map(loadDetails));
+    const pools = details.map((d) => d?.related || []);
+    for (let i = 0; pools.some((p) => p[i]); i++) for (const p of pools) if (p[i]) items.push(p[i]);
+    if (!items.length) items = await Remote.trending().catch(() => []);
+    const seen = new Set();
+    items = items.filter((r) => !seen.has(r.id) && seen.add(r.id) && !(state.videos[r.id] && !state.videos[r.id].unsaved));
+    discover = { key, items, at: Date.now(), loading: false };
+    if ((location.hash || '#home').startsWith('#home') && view.homeChip === 'All' && !$('#sheet-root .scrim')) rerender();
+  })().catch(() => { discover.loading = false; discover.at = Date.now(); discover.key = key; });
+}
 
 // ---------------------------------------------------------------- views
 const view = { homeChip: 'All', subsChip: 'All', subsChannel: null, shuffle: false };
@@ -633,20 +874,33 @@ function renderHome() {
   const k = ctx(list.map((v) => v.id));
   const shorts = vids.filter((v) => v.short && inFeeds(v));
 
+  // Mix in recommendations according to the slider (All only).
+  const tune = c === 'All' ? state.settings.discover : 0;
+  const found = tune ? discover.items.filter((r) => !r.short).slice(0, Math.round(tune / 100 * 40)) : [];
+  const foundShorts = tune ? discover.items.filter((r) => r.short).slice(0, Math.round(tune / 100 * 10)) : [];
+  const dk = rlist(found), dsk = rlist(foundShorts);
+  const entries = [];
+  for (let i = 0, j = 0, acc = 0; i < list.length || j < found.length;) {
+    acc += tune / 100;
+    if ((acc >= 1 || i >= list.length) && j < found.length) { entries.push(remoteCard(found[j++], dk, '✨ For you')); acc -= acc >= 1 ? 1 : 0; }
+    else entries.push(bigCard(list[i++], k));
+  }
+  const shelf = shortsShelf(shorts) + (foundShorts.length ? `${shorts.length ? '' : `<div class="section-title">${icon('shorts')} Shorts</div>`}<div class="rshort-row">${foundShorts.map((r) => remoteShort(r, dsk)).join('')}</div>` : '');
   let feed = '';
-  list.forEach((v, i) => {
-    feed += bigCard(v, k);
-    if (i === 1 && c === 'All') feed += `</div>${shortsShelf(shorts)}<div class="feed">`;
+  entries.forEach((html, i) => {
+    feed += html;
+    if (i === 1 && c === 'All') feed += `</div>${shelf}<div class="feed">`;
   });
-  if (list.length < 2 && c === 'All') feed += `</div>${shortsShelf(shorts)}<div class="feed">`;
+  if (entries.length < 2 && c === 'All') feed += `</div>${shelf}<div class="feed">`;
 
   return topbar() + `
     <div class="chips">
       <button class="chip ${view.shuffle ? 'active' : ''}" data-action="shuffle" aria-label="Shuffle">${icon('compass')}</button>
       ${chips.map((ch) => `<button class="chip ${ch === c ? 'active' : ''}" data-homechip="${esc(ch)}">${ch === 'Your custom feed' ? icon('feed') : ''}${esc(ch)}</button>`).join('')}
     </div>
+    ${c === 'All' ? `<div class="tune"><span>Familiar</span><input type="range" id="tune" min="0" max="100" step="10" value="${state.settings.discover}" aria-label="Mix of familiar and new videos"><span>New ✨</span></div>` : ''}
     <div class="feed">${feed}</div>
-    ${list.length ? '' : empty('feed', c === 'Your custom feed' ? 'Subscribe to channels or like videos to build your custom feed.' : 'Nothing here yet. Paste a YouTube link or upload a video from your phone.', addBtnHtml)}`;
+    ${entries.length ? '' : empty('feed', c === 'Your custom feed' ? 'Subscribe to channels or like videos to build your custom feed.' : 'Nothing here yet. Paste a YouTube link or upload a video from your phone.', addBtnHtml)}`;
 }
 
 function renderSubs() {
@@ -725,7 +979,13 @@ function renderList(title, ids, opts = {}) {
   const k = ctx(vids.map((v) => v.id));
   const playAll = vids.length ? `<div class="btn-row"><button class="btn red play-all" data-play="${vids[0].id}" data-ctx="${k}">${icon('play')} Play all</button>
     <button class="btn" data-action="shuffle-play" data-ctx="${k}">${icon('shuffle')} Shuffle</button></div>` : '';
-  return (opts.header ?? pageHeader(title, opts.extra || '')) + (opts.top || '') + playAll +
+  const tools = opts.manage && vids.length ? `<div class="pl-tools">
+      <label class="pl-search">${icon('search')}<input type="search" data-plsearch placeholder="Search in this list" autocomplete="off"></label>
+      <button class="pill-btn" data-action="sel-start" data-key="${opts.manage}">Select</button></div>` : '';
+  const extra = opts.manage ? `<button class="icon-btn" data-action="pl-tools" data-key="${opts.manage}" aria-label="List options">${icon('moreV')}</button>` : (opts.extra || '');
+  const selBar = view.select && opts.manage === view.select.key ? `<div class="sel-bar"><span id="sel-count">${view.select.ids.size} selected</span>
+      <button data-action="sel-all">All</button><button class="danger" data-action="sel-remove">Remove</button><button data-action="sel-cancel">Done</button></div>` : '';
+  return (opts.header ?? pageHeader(title, extra)) + (opts.top || '') + tools + selBar + playAll +
     (vids.length ? vids.map((v) => listRow(v, k, opts.sub ? opts.sub(v) : undefined, opts.editable)).join('') : empty(opts.icon || 'list', opts.empty || 'Nothing here yet.', opts.emptyBtn));
 }
 
@@ -747,6 +1007,8 @@ function renderPlaylists() {
 
 function renderShorts(startId) {
   let list = allVideos().filter((v) => v.short && (inFeeds(v) || v.id === startId));
+  if (startId && shortsQueue.includes(startId)) list = shortsQueue.map((id) => state.videos[id]).filter(Boolean);
+  else if (startId && state.videos[startId]?.unsaved) list = [state.videos[startId], ...list];
   if (startId) {
     const i = list.findIndex((v) => v.id === startId);
     if (i > 0) list = [...list.slice(i), ...list.slice(0, i)];
@@ -812,19 +1074,6 @@ function setupShorts() {
   root.querySelectorAll('.short').forEach((el) => io.observe(el));
 }
 
-function renderSearch(q) {
-  const ql = q.toLowerCase();
-  const links = findLinks(q);
-  const res = q ? allVideos().filter((v) => [v.title, v.channel, v.category, v.description, ...(v.tags || []).map((t) => '#' + t)].join(' ').toLowerCase().includes(ql)) : [];
-  const k = ctx(res.map((v) => v.id));
-  return `<div class="searchbar"><button class="icon-btn" data-action="back" aria-label="Back">${icon('back')}</button>
-    <input id="search-input" type="search" placeholder="Search your library or paste a link" value="${esc(q)}" autocomplete="off" enterkeyhint="search"></div>
-    ${links.length ? `<button class="lib-item" style="width:100%;text-align:left" data-action="add-from-search">${icon('plus')}<div class="text"><div class="title">Add ${links.length} video${links.length > 1 ? 's' : ''} from link</div></div></button>` : ''}
-    ${res.map((v) => listRow(v, k)).join('')}
-    ${q && !links.length ? `<a class="lib-item" target="_blank" rel="noopener" href="https://www.youtube.com/results?search_query=${encodeURIComponent(q)}">${icon('external')}<div class="text"><div class="title">Search YouTube for “${esc(q)}”</div><div class="sub">Opens youtube.com — copy a link and paste it here to save it</div></div></a>` : ''}
-    ${!q ? empty('search', 'Search titles, channels and categories you\'ve saved — or paste a YouTube link to add it.') : ''}`;
-}
-
 function comicToggle() {
   const on = !!state.settings.comic;
   return `<button class="comic-btn ${on ? 'on' : ''}" data-action="toggle-comic" aria-pressed="${on}">${icon('zap')} Comic style${on ? ': on' : ''}</button>`;
@@ -864,7 +1113,7 @@ function renderManage() {
 
 // ---------------------------------------------------------------- router
 function route(animate) {
-  ctxLists = {}; ctxSeq = 0;
+  ctxLists = {}; ctxSeq = 0; remoteLists = {};
   const h = decodeURIComponent(location.hash.slice(1) || 'home');
   const [page, ...rest] = h.split('/');
   const arg = rest.join('/');
@@ -874,20 +1123,20 @@ function route(animate) {
     case 'shorts': html = renderShorts(arg); break;
     case 'subs': html = renderSubs(); break;
     case 'you': html = renderYou(); break;
-    case 'search': html = renderSearch(arg); break;
+    case 'search': html = renderSearch(arg, view.searchFilter?.q === arg ? view.searchFilter.f : 'All'); break;
     case 'history': {
       const extra = state.history.length ? `<button class="icon-btn" data-action="clear-history" aria-label="Clear history">${icon('trash')}</button>` : '';
       html = renderList('History', state.history.map((x) => x.id), { extra, icon: 'history', empty: 'No watch history yet.', sub: (v) => 'watched ' + ago(state.history.find((x) => x.id === v.id).at) });
       break;
     }
-    case 'liked': html = renderList('Liked videos', state.liked, { icon: 'like', empty: 'Tap Like on a video to save it here.' }); break;
-    case 'later': html = renderList('Watch later', state.later, { icon: 'clock', empty: 'Save videos to watch later.' }); break;
+    case 'liked': html = renderList('Liked videos', state.liked, { manage: 'liked', icon: 'like', empty: 'Tap Like on a video to save it here.' }); break;
+    case 'later': html = renderList('Watch later', state.later, { manage: 'later', icon: 'clock', empty: 'Save videos to watch later.' }); break;
     case 'library': html = renderList('All saved videos', allVideos().map((v) => v.id), { icon: 'save' }); break;
     case 'files': html = renderFiles(); break;
     case 'playlists': html = renderPlaylists(); break;
     case 'playlist': {
       const pl = state.playlists.find((p) => p.id === arg);
-      html = pl ? renderList(pl.name, pl.items, { extra: `<button class="icon-btn" data-action="playlist-menu" data-pl="${pl.id}" aria-label="Playlist options">${icon('moreV')}</button>`, empty: 'Add videos with “Save to playlist”.' }) : renderHome();
+      html = pl ? renderList(pl.name, pl.items, { manage: 'pl:' + pl.id, empty: 'Add videos with “Save to playlist”.' }) : renderHome();
       break;
     }
     case 'channel': html = renderChannel(arg); break;
@@ -897,6 +1146,7 @@ function route(animate) {
     default: html = renderHome();
   }
   if (page !== 'edit') editDraft = null;
+  if (view.select && view.select.page !== h) view.select = null;
   if (page !== 'profile' && profDraft) { profDraft = null; applyTheme(); }
   const push = ['history', 'liked', 'later', 'library', 'files', 'playlists', 'playlist', 'channel', 'edit', 'profile', 'manage', 'search'].includes(page);
   main.classList.toggle('enter', !!animate && !reduceMotion && !push);
@@ -907,12 +1157,10 @@ function route(animate) {
   $('#tab-avatar').innerHTML = profileAvatar(28);
   document.body.classList.toggle('on-shorts', page === 'shorts');
   if (page === 'shorts') setupShorts();
-  if (page === 'search') {
-    const inp = $('#search-input');
-    if (!arg) inp.focus();
-    inp.addEventListener('change', () => { location.replace('#search/' + encodeURIComponent(inp.value)); });
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); });
-  }
+  if (page === 'search') setupSearch(arg);
+  if ((page === 'home' || !page) && view.homeChip === 'All' && state.settings.discover > 0) loadDiscover();
+  main.classList.toggle('selecting', !!view.select && view.select.page === h);
+  if (view.select) main.querySelectorAll('.lrow').forEach((r) => r.classList.toggle('sel', view.select.ids.has(r.dataset.id)));
   requestVisibleStats(main);
 }
 function rerender() { const y = scrollY; route(false); scrollTo(0, y); }
@@ -952,9 +1200,15 @@ function onYtState(e) {
   updateMiniIcon();
   if (e.data === 0) onEnded();
 }
-function onEnded() {
+async function onEnded() {
   recordProgress(true);
-  if (state.settings.autoplay) { const n = nextInQueue(); if (n) openVideo(n, queue); }
+  if (!state.settings.autoplay) return;
+  let n = nextInQueue();
+  if (!n && current && !state.videos[current]?.local) {
+    const rel = (await loadDetails(current))?.related?.find((r) => !r.short && !watched(r.id));
+    if (rel) { n = ensureVideo(rel).id; queue = [...queue, n]; }
+  }
+  if (n) openVideo(n, queue);
 }
 lv().addEventListener('ended', onEnded);
 lv().addEventListener('play', updateMiniIcon);
@@ -964,8 +1218,8 @@ function isPlaying() {
   if (engine === 'local') { const v = lv(); return !v.paused && !v.ended; }
   return !!(yt && yt.getPlayerState && yt.getPlayerState() === 1);
 }
-function pausePlayer() { if (engine === 'local') lv().pause(); else if (yt && yt.pauseVideo) yt.pauseVideo(); }
-function resumePlayer() { if (engine === 'local') lv().play().catch(() => {}); else if (yt && yt.playVideo) yt.playVideo(); }
+function pausePlayer() { userPaused = true; if (engine === 'local') lv().pause(); else if (yt && yt.pauseVideo) yt.pauseVideo(); }
+function resumePlayer() { userPaused = false; if (engine === 'local') lv().play().catch(() => {}); else if (yt && yt.playVideo) yt.playVideo(); }
 function playerTimes() {
   if (engine === 'local') { const v = lv(); return [v.currentTime, isFinite(v.duration) ? v.duration : 0]; }
   if (yt && yt.getCurrentTime) return [yt.getCurrentTime(), yt.getDuration()];
@@ -985,7 +1239,98 @@ function recordProgress(force) {
   $('#mini-progress-bar').style.width = (t / d * 100) + '%';
   if (force || Date.now() - lastSave > 5000) { lastSave = Date.now(); save(); }
 }
-setInterval(() => { if (isPlaying()) recordProgress(); }, 1000);
+setInterval(() => { if (isPlaying()) { recordProgress(); checkSkips(); } }, 500);
+
+// ---------------------------------------------------------------- sponsor skipping (SponsorBlock)
+const SB_CATS = { sponsor: 'Sponsors', selfpromo: 'Self-promo', interaction: 'Subscribe reminders', intro: 'Intros', outro: 'Endcards', music_offtopic: 'Non-music parts' };
+const SB_ONE = { sponsor: 'sponsor', selfpromo: 'self-promo', interaction: 'subscribe reminder', intro: 'intro', outro: 'endcard', music_offtopic: 'non-music part' };
+let segments = [];
+function loadSegments(id) {
+  segments = [];
+  const sb = state.settings.sponsor;
+  if (!sb.on || !sb.cats.length || state.videos[id]?.local) return;
+  Remote.sponsorSegments(id, sb.cats).then((list) => { if (current === id) segments = list; }).catch(() => {});
+}
+function checkSkips() {
+  if (engine !== 'yt' || !segments.length || !yt?.getCurrentTime) return;
+  const t = yt.getCurrentTime();
+  for (const seg of segments) {
+    if (t < seg.start - 1) seg.done = false; // watching it again after seeking back
+    if (!seg.done && t >= seg.start && t < seg.end - 0.4) {
+      seg.done = true;
+      yt.seekTo(seg.end, true);
+      toast(`Skipped ${SB_ONE[seg.category] || 'segment'} ⏭`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- seeking, lock screen, background play, PiP
+function seekTo(sec) {
+  if (engine === 'local') lv().currentTime = sec;
+  else if (yt?.seekTo) yt.seekTo(sec, true);
+}
+function seekBy(d) { const [t] = playerTimes(); seekTo(Math.max(0, t + d)); }
+function updateMediaSession(v) {
+  if (!('mediaSession' in navigator) || !v) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: v.title, artist: v.channel, album: 'MyTube', artwork: [{ src: thumb(v.id), sizes: '480x360', type: 'image/jpeg' }] });
+    const handlers = {
+      play: resumePlayer, pause: pausePlayer,
+      previoustrack: () => { const p = prevInQueue(); if (p) openVideo(p, queue); },
+      nexttrack: () => { const n = nextInQueue(); if (n) openVideo(n, queue); },
+      seekbackward: () => seekBy(-10), seekforward: () => seekBy(10),
+      seekto: (d) => seekTo(d.seekTime),
+    };
+    for (const [k, f] of Object.entries(handlers)) { try { navigator.mediaSession.setActionHandler(k, f); } catch { /* unsupported action */ } }
+  } catch { /* no media session */ }
+}
+// Phones pause video when the app goes to the background; for your uploads we
+// start it again so the sound keeps going (YouTube's player can't be kept awake).
+let userPaused = false;
+lv().addEventListener('pause', () => {
+  if (document.hidden && state.settings.bgPlay && !userPaused && engine === 'local' && current) setTimeout(() => lv().play().catch(() => {}), 60);
+});
+async function togglePip() {
+  const v = lv();
+  try {
+    if (document.pictureInPictureElement) await document.exitPictureInPicture();
+    else if (document.pictureInPictureEnabled && v.requestPictureInPicture) await v.requestPictureInPicture();
+    else if (v.webkitSupportsPresentationMode?.('picture-in-picture')) v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+    else toast('Picture-in-picture isn’t available on this device');
+  } catch { toast('Couldn’t start picture-in-picture'); }
+}
+
+// ---------------------------------------------------------------- equalizer (your uploads)
+const EQ_PRESETS = { flat: ['Flat', 0, 0, 0, false], bass: ['Bass boost', 8, 0, 1, false], voice: ['Voice clarity', -3, 6, 2, false], night: ['Night mode', 0, 3, 0, true], bright: ['Bright', 0, 1, 6, false] };
+let audioGraph = null;
+const eqActive = () => { const e = state.settings.eq; return !!(e.bass || e.voice || e.treble || e.norm); };
+function ensureAudioGraph() {
+  if (audioGraph) return audioGraph;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  const ctx = new AC();
+  const src = ctx.createMediaElementSource(lv());
+  const bass = ctx.createBiquadFilter(); bass.type = 'lowshelf'; bass.frequency.value = 160;
+  const voice = ctx.createBiquadFilter(); voice.type = 'peaking'; voice.frequency.value = 2500; voice.Q.value = 0.9;
+  const treble = ctx.createBiquadFilter(); treble.type = 'highshelf'; treble.frequency.value = 6500;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -28; comp.knee.value = 24; comp.ratio.value = 8; comp.attack.value = 0.004; comp.release.value = 0.25;
+  const makeup = ctx.createGain(); makeup.gain.value = 1.5;
+  src.connect(bass); bass.connect(voice); voice.connect(treble);
+  audioGraph = { ctx, bass, voice, treble, comp, makeup };
+  applyEq();
+  return audioGraph;
+}
+function applyEq() {
+  if (!audioGraph) { if (eqActive() && engine === 'local' && current) ensureAudioGraph(); return; }
+  const g = audioGraph, e = state.settings.eq;
+  g.bass.gain.value = e.bass; g.voice.gain.value = e.voice; g.treble.gain.value = e.treble;
+  [g.treble, g.comp, g.makeup].forEach((n) => n.disconnect());
+  if (e.norm) { g.treble.connect(g.comp); g.comp.connect(g.makeup); g.makeup.connect(g.ctx.destination); }
+  else g.treble.connect(g.ctx.destination);
+  if (g.ctx.state === 'suspended') g.ctx.resume();
+}
+lv().addEventListener('play', () => { if (audioGraph?.ctx.state === 'suspended') audioGraph.ctx.resume(); });
 
 function addHistory(id) {
   state.history = state.history.filter((h) => h.id !== id);
@@ -1003,7 +1348,7 @@ function prevInQueue() {
   return i > 0 ? queue[i - 1] : null;
 }
 
-async function openVideo(id, q) {
+async function openVideo(id, q, startAt) {
   const v = state.videos[id];
   if (!v) return;
   if (current && current !== id) recordProgress(true);
@@ -1011,8 +1356,10 @@ async function openVideo(id, q) {
   queue = q && q.length ? q : allVideos().filter((x) => !x.short && inFeeds(x)).map((x) => x.id);
   if (!queue.includes(id)) queue = [id, ...queue];
   const p = state.progress[id];
-  const start = p && p.d && p.t > 10 && p.t < p.d - 15 ? p.t : 0;
+  const start = startAt ?? (p && p.d && p.t > 10 && p.t < p.d - 15 ? p.t : 0);
   addHistory(id);
+  userPaused = false;
+  updateMediaSession(v);
   setPlayerMode('full');
   renderPlayerBody(true);
 
@@ -1026,10 +1373,15 @@ async function openVideo(id, q) {
     const el = lv();
     el.src = url;
     el.currentTime = start;
+    if (eqActive()) ensureAudioGraph();
     el.play().catch(() => {});
   } else {
     stopLocal();
     loadInPlayer(id, start);
+    loadSegments(id);
+    // Description, related videos and comments arrive in the background.
+    loadDetails(id).then(() => { if (current === id) refreshWatchSlots(id); });
+    loadComments(id).then(() => { if (current === id) afterCommentChange(id); });
   }
   updateMiniIcon();
 }
@@ -1046,23 +1398,105 @@ function setPlayerMode(mode) {
 
 function commentsCard(id) {
   const list = state.comments[id] || [];
-  const total = list.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
+  const own = list.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
   const top = [...list].sort((x, y) => cScore(y) - cScore(x) || y.at - x.at)[0];
+  const rc = commentCache.get(id);
+  const yt = (rc?.list || []).filter((c) => !c.hidden).sort((a, b) => b.score - a.score)[0];
+  const total = own + (rc?.list?.length || 0);
+  const face = (c) => c.avatar ? `<span class="avatar av-28"><img src="${esc(c.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>` : avatar(c.author, 28);
   return `<button class="comments-card" data-action="comments" data-id="${id}">
-    <div class="cc-head"><b>Comments</b> <span class="sub">${total || ''}</span></div>
-    <div class="cc-body">${profileAvatar(28)}${top ? `<span class="cc-text">${esc(top.text)}</span>` : '<span class="cc-text muted">Add a comment...</span>'}</div>
+    <div class="cc-head"><b>Comments</b> <span class="sub">${total ? fmtCount(total) + (rc?.list?.length >= 20 ? '+' : '') : ''}</span></div>
+    <div class="cc-body">${yt ? `${face(yt)}<span class="cc-text">${esc(yt.text)}</span>` : top ? `${profileAvatar(28)}<span class="cc-text">${esc(top.text)}</span>` : `${profileAvatar(28)}<span class="cc-text muted">${rc?.loading ? 'Loading comments…' : 'Add a comment...'}</span>`}</div>
   </button>`;
 }
+const commentCache = new Map();
+function loadComments(id) {
+  if (!id || state.videos[id]?.local) return Promise.resolve(null);
+  const hit = commentCache.get(id);
+  if (hit?.promise) return hit.promise;
+  const entry = { loading: true };
+  entry.promise = Remote.comments(id)
+    .then((r) => { Object.assign(entry, { loading: false, disabled: r.disabled, list: Remote.classify(r.list) }); return entry; })
+    .catch(() => { Object.assign(entry, { loading: false, error: true }); return entry; });
+  commentCache.set(id, entry);
+  return entry.promise;
+}
+function agoSeconds(text) {
+  const m = String(text).match(/(\d+)\s*(second|minute|hour|day|week|month|year)/i);
+  if (!m) return 0;
+  return +m[1] * { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2592000, year: 31536000 }[m[2].toLowerCase()];
+}
+function frameHtml(id, sec, width = 176) {
+  const f = Remote.frameAt(detailsNow(id)?.frames, sec);
+  if (!f) return `<span class="frame fallback" style="width:${width}px;height:${Math.round(width * 9 / 16)}px;background-image:url('${thumb(id)}')"><b>${fmtTime(sec)}</b></span>`;
+  const sc = width / f.w;
+  return `<span class="frame" style="width:${width}px;height:${Math.round(f.h * sc)}px;background-image:url('${f.url}');background-size:${f.cols * f.w * sc}px ${f.rows * f.h * sc}px;background-position:-${f.x * sc}px -${f.y * sc}px"><b>${fmtTime(sec)}</b></span>`;
+}
+const previewHtml = (id, sec) => `<div class="ts-preview">${frameHtml(id, sec)}<button class="ts-jump" data-jump="${sec}">${icon('play')} Play from ${fmtTime(sec)}</button></div>`;
+function jumpTo(id, sec) {
+  closeSheet();
+  if (current === id) { seekTo(sec); resumePlayer(); if (playerMode !== 'full') setPlayerMode('full'); }
+  else if (state.videos[id]) openVideo(id, null, sec);
+}
+function remoteCommentItem(c, id) {
+  const long = c.text.length > 220 || c.text.split('\n').length > 5;
+  const expanded = cview.more.has(c.id);
+  return `<div class="cm ${c.hidden ? 'filtered' : ''}">
+    ${c.avatar ? `<span class="avatar av-36"><img src="${esc(c.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>` : avatar(c.author, 36)}
+    <div class="cm-main">
+      <div class="cm-meta">${c.pinned ? '<span class="cm-pin">📌 Pinned</span>' : ''}<span class="${c.owner ? 'cm-owner' : ''}">${esc(c.author)}</span> <span>• ${esc(c.ago)}</span>${c.hidden ? `<span class="cm-flag">${icon('shield')} ${esc(c.hidden)}</span>` : ''}</div>
+      <div class="cm-text ${long && !expanded ? 'clamp' : ''}" data-cid="${c.id}">${linkTimes(c.text, id)}</div>
+      ${long ? `<button class="cm-more" data-cmore="${c.id}">${expanded ? 'Show less' : 'Read more'}</button>` : ''}
+      ${cview.preview?.cid === c.id ? previewHtml(id, cview.preview.sec) : ''}
+      <div class="cm-actions static"><span>${icon('like')}<span>${c.likes ? fmtCount(c.likes) : ''}</span></span>${c.hearted ? '<span class="cm-heart" title="Loved by the creator">❤️</span>' : ''}${c.replies ? `<span class="cm-replycount">${fmtCount(c.replies)} repl${c.replies === 1 ? 'y' : 'ies'}</span>` : ''}</div>
+    </div></div>`;
+}
 
+function ratioText(id) {
+  const st = state.stats[id], r = likeRatio(id);
+  if (r == null) return '';
+  return `👍 ${fmtCount(st.likes + (state.liked.includes(id) ? 1 : 0))} · 👎 ${fmtCount(st.dislikes + (state.disliked.includes(id) ? 1 : 0))} · ${r}% liked`;
+}
 function descBox(v) {
   const extra = [v.category && `<span>${esc(v.category)}</span>`, v.kids && '<span>Made for kids</span>'].filter(Boolean).join('');
-  if (!v.description && !v.tags?.length && !extra) return '';
+  const desc = v.description || detailsNow(v.id)?.description?.trim() || '';
+  if (!desc && !v.tags?.length && !extra && v.local) return '';
   return `<button class="desc-box" data-action="desc-toggle">
-    <div class="desc-stats"><b data-views-long="${v.id}">${viewsLong(v.id)}</b> <b>${ago(v.addedAt)}</b> ${v.tags?.length ? `<span class="tags">${tagLinks(v.tags)}</span>` : ''}</div>
-    ${v.description ? `<div class="desc-text">${esc(v.description)}</div>` : ''}
+    <div class="desc-stats"><b data-views-long="${v.id}">${viewsLong(v.id)}</b> <b>${when(v)}</b> ${v.tags?.length ? `<span class="tags">${tagLinks(v.tags)}</span>` : ''}</div>
+    ${v.local ? '' : `<div class="desc-ratio" data-ratio-text="${v.id}">${ratioText(v.id)}</div>`}
+    ${desc ? `<div class="desc-text">${linkTimes(desc, v.id)}</div>` : ''}
     ${extra ? `<div class="desc-extra">${extra}</div>` : ''}
     <span class="desc-more">...more</span>
   </button>`;
+}
+
+// Details that already arrived (description, related videos, storyboard).
+const detailsReady = new Map();
+const detailsNow = (id) => detailsReady.get(id);
+function relatedHtml(id) {
+  const d = detailsNow(id);
+  if (state.videos[id]?.local) return '';
+  if (!d) return '<div class="section-title" style="font-size:16px">Related on YouTube</div><div class="feed"><div class="card skel"><div class="thumb"></div></div></div>';
+  const list = (d.related || []).filter((r) => !r.short).slice(0, 15);
+  if (!list.length) return '';
+  const k = rlist(list);
+  return `<div class="section-title" style="font-size:16px">Related on YouTube</div><div class="feed">${list.map((r) => remoteCard(r, k)).join('')}</div>`;
+}
+function refreshWatchSlots(id) {
+  const v = state.videos[id];
+  if (!v) return;
+  const rel = $('#related-slot'), desc = $('#desc-slot');
+  if (rel) rel.innerHTML = relatedHtml(id);
+  if (desc) desc.innerHTML = descBox(v);
+}
+// Turns 4:12-style times into buttons that jump the video there.
+function linkTimes(text, id) {
+  let out = '', last = 0;
+  for (const ts of Remote.timestamps(text)) {
+    out += esc(text.slice(last, ts.index)) + `<span class="ts" role="button" tabindex="0" data-ts="${ts.sec}" data-vid="${id}">${esc(ts.label)}</span>`;
+    last = ts.index + ts.length;
+  }
+  return out + esc(text.slice(last));
 }
 
 function renderPlayerBody(animate) {
@@ -1080,28 +1514,32 @@ function renderPlayerBody(animate) {
       <button class="icon-btn" data-action="prev" aria-label="Previous" ${prevInQueue() ? '' : 'disabled'}>${icon('prev')}</button>
       <button class="icon-btn" data-action="next" aria-label="Next" ${nextInQueue() ? '' : 'disabled'}>${icon('next')}</button>
       ${v.local ? '' : `<a class="icon-btn" href="${ytUrl(v)}" target="_blank" rel="noopener" aria-label="Open on YouTube">${icon('external')}</a>`}
+      ${v.local ? `<button class="icon-btn" data-action="pip" aria-label="Picture in picture">${icon('pip')}</button>` : ''}
+      <button class="icon-btn" data-action="eq" aria-label="Sound">${icon('eq')}</button>
       <button class="icon-btn" data-action="edit-current" aria-label="Edit video">${icon('edit')}</button>
       <button class="icon-btn" data-action="close-player" aria-label="Close">${icon('close')}</button></div>
     <div class="watch-info">${v.tags?.length ? `<div class="tagline">${tagLinks(v.tags.slice(0, 3))}</div>` : ''}<h2>${esc(v.title)}</h2>
       <div class="sub statline"><a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize"><b>${v.local ? myName(handle) : esc(handle)}</b></a>
         <span data-likes-long="${v.id}">${likesLong(v.id)}</span><span data-views-long="${v.id}">${viewsLong(v.id)}</span>
-        <span>${v.local ? 'uploaded' : 'added'} ${ago(v.addedAt)}</span>${visOf(v) !== 'public' ? `<span class="vis-pill">${icon(VISIBILITY[visOf(v)][0])} ${VISIBILITY[visOf(v)][1]}</span>` : ''}</div></div>
+        <span>${v.local ? 'uploaded ' + ago(v.addedAt) : when(v)}</span>${visOf(v) !== 'public' ? `<span class="vis-pill">${icon(VISIBILITY[visOf(v)][0])} ${VISIBILITY[visOf(v)][1]}</span>` : ''}</div></div>
     <div class="watch-row">
       <a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize">${channelAvatar(v, 36)}</a>
       ${v.local ? `<span class="watch-ch">${myName(v.channel)}</span>` : sub
         ? `<button class="pill-btn bell" data-act-sub="${esc(v.channel)}" aria-label="Subscribed — tap to unsubscribe">${icon('bell')}${icon('down')}</button>`
         : `<button class="sub-btn" data-act-sub="${esc(v.channel)}">Subscribe</button>`}
       <div class="spacer"></div>
-      <div class="like-pill"><button class="${liked ? 'on' : ''}" data-act-like="${v.id}" aria-label="Like" aria-pressed="${liked}">${icon('like')}<span data-likes-short="${v.id}">${likesShort(v.id)}</span></button><span class="sep"></span><button class="${disliked ? 'on' : ''}" data-act-dislike="${v.id}" aria-label="Dislike" aria-pressed="${disliked}">${icon('dislike')}</button></div>
+      <div class="like-pill"><button class="${liked ? 'on' : ''}" data-act-like="${v.id}" aria-label="Like" aria-pressed="${liked}">${icon('like')}<span data-likes-short="${v.id}">${likesShort(v.id)}</span></button><span class="sep"></span><button class="${disliked ? 'on' : ''}" data-act-dislike="${v.id}" aria-label="Dislike" aria-pressed="${disliked}">${icon('dislike')}<span data-dislikes-short="${v.id}">${dislikesShort(v.id)}</span></button>${v.local ? '' : `<span class="ratio ${likeRatio(v.id) == null ? 'hidden' : ''}" data-ratio="${v.id}" style="--r:${likeRatio(v.id) ?? 0}%"></span>`}</div>
+      ${v.unsaved ? `<button class="pill-btn save-lib" data-action="save-lib" data-id="${v.id}">${icon('bookmark')} Save</button>` : ''}
       <button class="icon-btn" data-act-share="${v.id}" aria-label="Share">${icon('share')}</button>
       <button class="icon-btn ${later ? 'on' : ''}" data-act-later="${v.id}" aria-label="Watch later">${icon('clock')}</button>
       <button class="icon-btn" data-menu="${v.id}" aria-label="More">${icon('more')}</button>
     </div>
-    ${descBox(v)}
+    <div id="desc-slot">${descBox(v)}</div>
     ${v.kids ? `<div class="comments-card off"><div class="cc-head"><b>Comments are turned off</b></div><div class="sub">This video is made for kids, so comments are off.</div></div>` : commentsCard(v.id)}
     <div class="section-title" style="font-size:16px">Up next ${state.settings.autoplay ? '<span class="sub" style="margin:0 0 0 6px;font-weight:400">· autoplay on</span>' : ''}</div>
     <div class="feed">${upNext.map((x) => bigCard(x, k)).join('')}</div>
-    ${upNext.length ? '' : '<div class="sub" style="padding:0 16px">Add more videos to build a queue.</div>'}`;
+    ${upNext.length || !v.local ? '' : '<div class="sub" style="padding:0 16px">Add more videos to build a queue.</div>'}
+    <div id="related-slot">${relatedHtml(v.id)}</div>`;
   requestVisibleStats(body);
 }
 
@@ -1145,6 +1583,7 @@ function videoMenu(id) {
   openSheet(`
     <h3 style="font-size:15px;font-weight:500">${esc(v.title)}</h3>
     <button class="opt" data-sheet="play">${icon('play')} Play</button>
+    ${v.unsaved ? `<button class="opt" data-sheet="savelib">${icon('bookmark')} Save to library</button>` : ''}
     <button class="opt" data-sheet="later">${icon('clock')} ${state.later.includes(id) ? 'Remove from Watch later' : 'Save to Watch later'}</button>
     <button class="opt" data-sheet="playlist">${icon('save')} Save to playlist</button>
     <button class="opt" data-sheet="comments">${icon('comment')} Comments</button>
@@ -1152,7 +1591,7 @@ function videoMenu(id) {
     <button class="opt" data-sheet="edit">${icon('edit')} Edit details</button>
     ${v.local ? '' : `<a class="opt" href="${ytUrl(v)}" target="_blank" rel="noopener">${icon('external')} Open on YouTube</a>`}
     ${plId ? `<button class="opt" data-sheet="unplaylist">${icon('trash')} Remove from this playlist</button>` : ''}
-    <button class="opt" data-sheet="remove" style="color:#ff4e45">${icon('trash')} ${v.local ? 'Delete from phone' : 'Remove from library'}</button>`, (s) => {
+    ${v.unsaved ? '' : `<button class="opt" data-sheet="remove" style="color:#ff4e45">${icon('trash')} ${v.local ? 'Delete from phone' : 'Remove from library'}</button>`}`, (s) => {
     s.addEventListener('click', (e) => {
       const b = e.target.closest('[data-sheet]');
       if (!b) return;
@@ -1160,6 +1599,7 @@ function videoMenu(id) {
       closeSheet();
       if (a === 'play') v.short ? (location.hash = '#shorts/' + id) : openVideo(id);
       else if (a === 'later') { toggleLater(id); refreshAfterAction(); }
+      else if (a === 'savelib') { saveToLibrary(id); refreshAfterAction(); }
       else if (a === 'playlist') playlistSheet(id);
       else if (a === 'comments') commentsSheet(id);
       else if (a === 'share') share(id);
@@ -1455,7 +1895,8 @@ function commentItem(c, reply) {
     ${profileAvatar(reply ? 28 : 36)}
     <div class="cm-main">
       <div class="cm-meta">${myName(p.handle)} <span>• ${ago(c.at)}</span></div>
-      <div class="cm-text ${long && !expanded ? 'clamp' : ''}">${esc(c.text)}</div>
+      <div class="cm-text ${long && !expanded ? 'clamp' : ''}" data-cid="${c.id}">${linkTimes(c.text, cview.vid)}</div>
+      ${cview.preview?.cid === c.id ? previewHtml(cview.vid, cview.preview.sec) : ''}
       ${long ? `<button class="cm-more" data-cmore="${c.id}">${expanded ? 'Show less' : 'Read more'}</button>` : ''}
       <div class="cm-actions">
         <button class="${c.liked ? 'on' : ''}" data-clike="${c.id}" aria-label="Like">${icon('like')}<span>${c.liked ? 1 : ''}</span></button>
@@ -1468,12 +1909,18 @@ function commentItem(c, reply) {
     ${cview.menu === c.id ? `<button class="cm-del" data-cdel="${c.id}">Delete</button>` : `<button class="more" data-cmenu="${c.id}" aria-label="Comment options">${icon('moreV')}</button>`}
   </div>`;
 }
-function commentsSheet(id) {
-  cview.replyTo = null; cview.menu = null;
+function commentsSheet(id, tab) {
+  const isYt = !state.videos[id]?.local;
+  cview.replyTo = null; cview.menu = null; cview.preview = null; cview.vid = id;
+  cview.tab = tab || cview.tab && cview.tabFor === id && cview.tab || (isYt ? 'youtube' : 'yours');
+  cview.tabFor = id;
+  if (!isYt) cview.tab = 'yours';
+  if (isYt) loadComments(id);
   openSheet(`<div class="cm-sheet">
     <div class="cm-head"><h3>Comments <span class="cm-count"></span></h3><button class="icon-btn" data-x="close" aria-label="Close">${icon('close')}</button></div>
-    <div class="cm-chips"><button class="chip" data-sort="top">Top</button><button class="chip" data-sort="newest">Newest</button></div>
-    <div class="cm-note">Your comments are private and saved only on this phone.</div>
+    ${isYt ? `<div class="cm-tabs" role="tablist">${[['youtube', 'YouTube'], ['highlights', '✨ Highlights'], ['yours', 'Yours']].map(([k, l]) => `<button role="tab" data-tab="${k}">${l}</button>`).join('')}</div>` : ''}
+    <div class="cm-chips"><button class="chip" data-sort="top">Top</button><button class="chip" data-sort="newest">Newest</button><button class="cm-filter" data-showhidden></button></div>
+    <div class="cm-note"></div>
     <div class="cm-list"></div>
     <div class="cm-bar">
       <div class="cm-replying hidden"><span></span><button data-x="cancel-reply" aria-label="Cancel reply">${icon('close')}</button></div>
@@ -1482,11 +1929,52 @@ function commentsSheet(id) {
     </div></div>`, (s) => {
     s.classList.add('tall');
     const inp = $('#cm-text', s), listEl = $('.cm-list', s);
+    const drawRemote = () => {
+      const rc = commentCache.get(id) || {};
+      const tabIs = (t) => cview.tab === t;
+      s.querySelector('.cm-bar').classList.add('hidden');
+      s.querySelector('.cm-chips').classList.toggle('hidden', tabIs('highlights'));
+      if (rc.loading) {
+        listEl.innerHTML = Array.from({ length: 4 }, () => '<div class="cm skel"><span class="avatar av-36"></span><div class="cm-main"><div class="skel-line short"></div><div class="skel-line"></div></div></div>').join('');
+        $('.cm-note', s).textContent = 'Loading comments from YouTube…';
+        return;
+      }
+      if (rc.error || rc.disabled) {
+        $('.cm-note', s).textContent = rc.disabled ? 'Comments are turned off for this video on YouTube.' : 'Couldn’t load YouTube comments right now.';
+        listEl.innerHTML = rc.disabled ? '' : `<div class="empty">${icon('comment')}<div>Check your connection and try again.</div><button class="btn" data-x="retry">Try again</button></div>`;
+        return;
+      }
+      const all = rc.list || [];
+      const hiddenCount = all.filter((c) => c.hidden).length;
+      $('.cm-count', s).textContent = all.length ? fmtCount(all.length) : '';
+      if (tabIs('highlights')) {
+        const moments = Remote.bestMoments(all, state.progress[id]?.d);
+        $('.cm-note', s).textContent = 'The moments viewers mention most in the comments. Tap one to jump there.';
+        listEl.innerHTML = moments.map((m) => `<button class="moment" data-jump="${m.sec}">${frameHtml(id, m.sec, 132)}
+          <span class="moment-text"><b>${fmtTime(m.sec)}</b><span class="sub">${m.count} viewer${m.count === 1 ? ' mentions' : 's mention'} this</span><span class="moment-sample">“${esc(m.sample.text.slice(0, 140))}”</span></span></button>`).join('')
+          || `<div class="empty">${icon('sparkle')}<div>No highlights yet.<br>They show up when viewers mention times like 4:12.</div></div>`;
+        return;
+      }
+      const f = $('[data-showhidden]', s);
+      f.classList.remove('hidden');
+      f.classList.toggle('on', !cview.showHidden);
+      f.innerHTML = `${icon('shield')} ${cview.showHidden ? 'Filter off' : hiddenCount ? `${hiddenCount} hidden` : 'Filter on'}`;
+      $('.cm-note', s).textContent = cview.showHidden ? 'Showing everything, including comments the filter flagged as spam, bots, self-promo or toxic.' : 'Smart filter hides bot copies, scams, self-promo and toxic comments, and puts real discussion first.';
+      const shown = all.filter((c) => cview.showHidden || !c.hidden)
+        .sort(cview.sort === 'top' ? (a, b) => b.score - a.score : (a, b) => agoSeconds(a.ago) - agoSeconds(b.ago));
+      listEl.innerHTML = shown.map((c) => remoteCommentItem(c, id)).join('') || `<div class="empty">${icon('comment')}<div>No comments yet.</div></div>`;
+    };
     const draw = () => {
+      s.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === cview.tab));
+      s.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('active', b.dataset.sort === cview.sort));
+      if (cview.tab !== 'yours') { drawRemote(); return; }
+      s.querySelector('.cm-bar').classList.remove('hidden');
+      s.querySelector('.cm-chips').classList.remove('hidden');
+      $('[data-showhidden]', s).classList.add('hidden');
+      $('.cm-note', s).textContent = 'Your comments are private and saved only on this phone.';
       const list = state.comments[id] || [];
       const total = list.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
       $('.cm-count', s).textContent = total || '';
-      s.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('active', b.dataset.sort === cview.sort));
       const sorted = [...list].sort(cview.sort === 'top' ? (x, y) => cScore(y) - cScore(x) || y.at - x.at : (x, y) => y.at - x.at);
       listEl.innerHTML = sorted.map((c) => commentItem(c, false)).join('') ||
         `<div class="empty">${icon('comment')}<div>No comments yet.<br>Start the conversation.</div></div>`;
@@ -1514,11 +2002,23 @@ function commentsSheet(id) {
       buzz(10);
     };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') post(); });
+    if (isYt) loadComments(id).then(() => { if (s.isConnected) draw(); });
     s.addEventListener('click', (e) => {
-      const t = e.target.closest('button');
+      const t = e.target.closest('button, [data-ts]');
       if (!t) return;
       const d = t.dataset;
       if (d.x === 'close') return closeSheet();
+      if (d.jump) return jumpTo(id, +d.jump);
+      if (d.ts) {
+        const cid = t.closest('.cm-text')?.dataset.cid;
+        cview.preview = cview.preview?.cid === cid && cview.preview.sec === +d.ts ? null : { cid, sec: +d.ts };
+        loadDetails(id).then(() => { if (s.isConnected) draw(); });
+        draw();
+        return;
+      }
+      if (d.tab) { cview.tab = d.tab; cview.preview = null; if (d.tab === 'highlights') loadDetails(id).then(() => { if (s.isConnected) draw(); }); draw(); listEl.scrollTop = 0; return; }
+      if (d.showhidden !== undefined) { cview.showHidden = !cview.showHidden; draw(); return; }
+      if (d.x === 'retry') { commentCache.delete(id); loadComments(id).then(() => { if (s.isConnected) draw(); }); draw(); return; }
       if (d.x === 'post') return post();
       if (d.x === 'cancel-reply') cview.replyTo = null;
       if (d.sort) cview.sort = d.sort;
@@ -1547,7 +2047,7 @@ function commentsSheet(id) {
   });
 }
 function afterCommentChange(id) {
-  const total = (state.comments[id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
+  const total = (state.comments[id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0) + (commentCache.get(id)?.list?.length || 0);
   if (current === id) {
     const card = $('#player-body .comments-card');
     if (card) card.outerHTML = commentsCard(id);
@@ -1592,6 +2092,110 @@ function newPlaylistSheet() {
       const id = 'p' + Date.now().toString(36);
       state.playlists.push({ id, name, items: [] });
       save(); closeSheet(); location.hash = '#playlist/' + id;
+    });
+  });
+}
+
+// ---------------------------------------------------------------- playlist tools
+function listArr(key) {
+  if (key === 'liked') return state.liked;
+  if (key === 'later') return state.later;
+  return state.playlists.find((p) => 'pl:' + p.id === key)?.items || [];
+}
+function setListArr(key, arr) {
+  if (key === 'liked') state.liked = arr;
+  else if (key === 'later') state.later = arr;
+  else { const pl = state.playlists.find((p) => 'pl:' + p.id === key); if (pl) pl.items = arr; }
+  save();
+}
+function removeDuplicates(key) {
+  const ids = new Set(), names = new Set();
+  const before = listArr(key);
+  const after = before.filter((id) => {
+    const v = state.videos[id];
+    const name = v ? (v.title + '|' + v.channel).toLowerCase().replace(/\s+/g, ' ') : id;
+    if (ids.has(id) || names.has(name)) return false;
+    ids.add(id); names.add(name);
+    return true;
+  });
+  setListArr(key, after);
+  toast(before.length - after.length ? `Removed ${before.length - after.length} duplicate${before.length - after.length === 1 ? '' : 's'}` : 'No duplicates found');
+  rerender();
+}
+async function isUnavailable(id) {
+  const v = state.videos[id];
+  if (!v) return true;
+  if (v.local) return !(await getFile(id).catch(() => null));
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`);
+    return [401, 403, 404].includes(r.status);
+  } catch { return false; } // offline: keep it
+}
+async function removeUnavailable(key) {
+  const ids = [...listArr(key)];
+  const dead = new Set();
+  let done = 0;
+  const worker = async () => {
+    while (ids.length) {
+      const id = ids.shift();
+      if (await isUnavailable(id)) dead.add(id);
+      toast(`Checking videos… ${++done}`);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  setListArr(key, listArr(key).filter((id) => !dead.has(id)));
+  toast(dead.size ? `Removed ${dead.size} private or deleted video${dead.size === 1 ? '' : 's'}` : 'Every video is still available');
+  rerender();
+}
+function listToolsSheet(key) {
+  const plId = key.startsWith('pl:') ? key.slice(3) : null;
+  openSheet(`<h3>List tools</h3>
+    <button class="opt" data-x="dupes">${icon('list')} Remove duplicates</button>
+    <button class="opt" data-x="dead">${icon('shield')} Remove private or deleted videos</button>
+    <button class="opt" data-x="select">${icon('check')} Select videos to remove</button>
+    ${plId ? `<button class="opt" data-x="edit">${icon('edit')} Rename or delete playlist</button>` : ''}`, (s) => {
+    s.addEventListener('click', (e) => {
+      const x = e.target.closest('[data-x]')?.dataset.x;
+      if (!x) return;
+      closeSheet();
+      if (x === 'dupes') removeDuplicates(key);
+      if (x === 'dead') removeUnavailable(key);
+      if (x === 'select') { view.select = { page: decodeURIComponent(location.hash.slice(1)), key, ids: new Set() }; rerender(); }
+      if (x === 'edit') playlistMenu(plId);
+    });
+  });
+}
+
+// ---------------------------------------------------------------- sound sheet
+function eqSheet() {
+  const e = state.settings.eq, isLocal = engine === 'local';
+  const dis = isLocal ? '' : 'disabled';
+  openSheet(`<h3>Sound</h3>
+    ${isLocal ? '' : '<div class="hint">The equalizer works on videos you uploaded. YouTube’s player doesn’t let other apps change its sound.</div>'}
+    <div class="fx-picker warm">${Object.entries(EQ_PRESETS).map(([k, p]) => `<button class="fx-chip ${e.preset === k ? 'on' : ''}" data-eqp="${k}" ${dis}>${p[0]}</button>`).join('')}</div>
+    <div class="eq-sliders">${[['bass', 'Bass'], ['voice', 'Dialogue'], ['treble', 'Treble']].map(([k, l]) => `
+      <label class="eq-row"><span>${l}</span><input type="range" min="-12" max="12" step="1" value="${e[k]}" data-eq="${k}" ${dis}><b data-eqv="${k}">${e[k] > 0 ? '+' : ''}${e[k]} dB</b></label>`).join('')}</div>
+    <div class="set-group"><label class="check">${icon('volume')}<span style="flex:1">Even out loud sounds</span><input class="switch" type="checkbox" data-eqnorm ${e.norm ? 'checked' : ''} ${dis}></label></div>
+    <div class="hint">On iPhone, the equalizer can stop sound when the screen locks. Set it to Flat for background listening.</div>`, (s) => {
+    s.classList.add('settings');
+    const sync = () => {
+      s.querySelectorAll('[data-eq]').forEach((r) => { r.value = e[r.dataset.eq]; });
+      s.querySelectorAll('[data-eqv]').forEach((b) => { const v = e[b.dataset.eqv]; b.textContent = `${v > 0 ? '+' : ''}${v} dB`; });
+      s.querySelectorAll('[data-eqp]').forEach((b) => b.classList.toggle('on', b.dataset.eqp === e.preset));
+      $('[data-eqnorm]', s).checked = e.norm;
+    };
+    s.addEventListener('input', (ev) => {
+      const k = ev.target.dataset.eq;
+      if (k) { e[k] = +ev.target.value; e.preset = 'custom'; }
+      if (ev.target.hasAttribute('data-eqnorm')) e.norm = ev.target.checked;
+      sync(); applyEq(); save();
+    });
+    s.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-eqp]');
+      if (!b) return;
+      const [, bass, voice, treble, norm] = EQ_PRESETS[b.dataset.eqp];
+      Object.assign(e, { preset: b.dataset.eqp, bass, voice, treble, norm });
+      sync(); applyEq(); save(); pop(b);
     });
   });
 }
@@ -1755,6 +2359,15 @@ function settingsSheet() {
     <div class="fx-picker warm">${Object.entries(LIKE_FX).map(([k, l]) => `<button class="fx-chip ${(st.likeFx || 'pop') === k ? 'on' : ''}" data-likefx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
     <div class="set-label">Subscribe effect</div>
     <div class="fx-picker cool">${Object.entries(SUB_FX).map(([k, l]) => `<button class="fx-chip ${(st.subFx || 'confetti') === k ? 'on' : ''}" data-subfx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
+    <div class="set-label">Playback</div>
+    <div class="set-group">
+      <label class="check">${icon('volume')}<span style="flex:1">Background play<small>Keeps your uploads playing when you lock the phone</small></span><input class="switch" type="checkbox" id="st-bg" ${st.bgPlay ? 'checked' : ''}></label>
+      <label class="check">${icon('skip')}<span style="flex:1">Skip sponsors<small>Community-marked segments from SponsorBlock</small></span><input class="switch" type="checkbox" id="st-sb" ${st.sponsor.on ? 'checked' : ''}></label>
+    </div>
+    <div class="fx-picker cool">${Object.entries(SB_CATS).map(([k, l]) => `<button class="fx-chip ${st.sponsor.cats.includes(k) ? 'on' : ''}" data-sbcat="${k}">${l}</button>`).join('')}</div>
+    <div class="set-label">YouTube API key <span>optional</span></div>
+    <div class="api-row"><input type="text" id="st-key" placeholder="Paste a key for steadier search" value="${esc(st.apiKey)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="fx-chip" data-x="savekey">Save</button></div>
+    <div class="hint">Search, comments and recommendations come from public YouTube mirrors, which are sometimes busy. A free YouTube Data API v3 key from Google Cloud makes search and comments steadier.</div>
     <div class="set-group inset">
     <button class="opt" data-x="export">${icon('download')} Back up my library</button>
     <label class="opt" style="cursor:pointer">${icon('upload')} Restore from backup<input type="file" id="st-import" accept="application/json,.json" hidden></label>
@@ -1766,6 +2379,26 @@ function settingsSheet() {
     $('#st-dark', s).addEventListener('change', (e) => { st.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); save(); });
     $('#st-auto', s).addEventListener('change', (e) => { st.autoplay = e.target.checked; save(); if (current) renderPlayerBody(); });
     $('#st-comic', s).addEventListener('change', (e) => { st.comic = e.target.checked; save(); applyTheme(); rerender(); });
+    $('#st-bg', s).addEventListener('change', (e) => { st.bgPlay = e.target.checked; save(); });
+    $('#st-sb', s).addEventListener('change', (e) => { st.sponsor.on = e.target.checked; save(); if (current) loadSegments(current); });
+    s.addEventListener('click', (e) => {
+      const cat = e.target.closest('[data-sbcat]');
+      if (cat) {
+        const k = cat.dataset.sbcat, cats = st.sponsor.cats;
+        st.sponsor.cats = cats.includes(k) ? cats.filter((x) => x !== k) : [...cats, k];
+        cat.classList.toggle('on', st.sponsor.cats.includes(k));
+        pop(cat); save();
+        if (current) loadSegments(current);
+        return;
+      }
+      if (e.target.closest('[data-x="savekey"]')) {
+        st.apiKey = $('#st-key', s).value.trim();
+        Remote.setKey(st.apiKey);
+        searchCache.clear(); commentCache.clear();
+        save();
+        toast(st.apiKey ? 'API key saved — search uses it now' : 'API key removed');
+      }
+    });
     s.addEventListener('click', (e) => {
       const b = e.target.closest('[data-likefx],[data-subfx]');
       if (!b) return;
@@ -1850,6 +2483,19 @@ function replay(el, cls) {
   el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
 }
 
+document.addEventListener('input', (e) => {
+  if (e.target.matches('[data-plsearch]')) {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#main .lrow').forEach((r) => r.classList.toggle('hidden', !!q && !r.dataset.q.includes(q)));
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'tune') return;
+  state.settings.discover = +e.target.value;
+  save();
+  rerender();
+  if (state.settings.discover > 0) loadDiscover();
+});
 document.addEventListener('change', async (e) => {
   if (!e.target.matches('[data-upload]')) return;
   const files = [...e.target.files];
@@ -1861,9 +2507,33 @@ document.addEventListener('change', async (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-play],[data-menu],[data-action],[data-homechip],[data-homechip-link],[data-subschip],[data-subch],[data-act-like],[data-act-dislike],[data-act-later],[data-act-share],[data-act-sub],[data-act-playlist]');
-  if (!t || t.closest('#sheet-root')) return;
+  // Taps inside sheets (or on things a sheet just redrew away) are handled by the sheet.
+  if (!e.target.isConnected || e.target.closest('#sheet-root')) return;
+  // Selecting rows in a list
+  const selRow = view.select && e.target.closest('#main.selecting .lrow');
+  if (selRow) {
+    const id = selRow.dataset.id, ids = view.select.ids;
+    ids.has(id) ? ids.delete(id) : ids.add(id);
+    selRow.classList.toggle('sel', ids.has(id));
+    $('#sel-count').textContent = `${ids.size} selected`;
+    return;
+  }
+  // Timestamps in descriptions jump the video
+  const ts = e.target.closest('[data-ts]');
+  if (ts) { e.preventDefault(); jumpTo(ts.dataset.vid, +ts.dataset.ts); return; }
+  const t = e.target.closest('[data-play],[data-rplay],[data-rmenu],[data-sfilter],[data-fill],[data-menu],[data-action],[data-homechip],[data-homechip-link],[data-subschip],[data-subch],[data-act-like],[data-act-dislike],[data-act-later],[data-act-share],[data-act-sub],[data-act-playlist]');
+  if (!t) return;
   const d = t.dataset;
+
+  if (d.rplay) { e.preventDefault(); playRemote(d.rplay, d.rk); return; }
+  if (d.rmenu) { e.preventDefault(); e.stopPropagation(); const r = remoteById.get(d.rmenu); if (r) videoMenu(ensureVideo(r).id); return; }
+  if (d.sfilter) { view.searchFilter = { q: decodeURIComponent(location.hash.slice(8)), f: d.sfilter }; rerender(); return; }
+  if (d.fill !== undefined) {
+    e.preventDefault();
+    const inp = $('#search-input');
+    if (inp) { inp.value = d.fill + ' '; inp.focus(); inp.dispatchEvent(new Event('input')); }
+    return;
+  }
 
   if (d.play) {
     e.preventDefault();
@@ -1908,6 +2578,25 @@ document.addEventListener('click', (e) => {
 
   switch (d.action) {
     case 'add': addSheet(); break;
+    case 'voice': voiceSearch(t); break;
+    case 'search-clear': location.hash = '#search'; break;
+    case 'search-history-clear': confirmSheet('Clear your search history?', 'Clear', () => { state.searches = []; save(); rerender(); }); break;
+    case 'search-retry': searchCache.delete(d.q); rerender(); break;
+    case 'save-lib': saveToLibrary(d.id); refreshAfterAction(); burst($('#player-body [data-action="save-lib"]') || t, 'stars'); break;
+    case 'pip': togglePip(); break;
+    case 'eq': eqSheet(); break;
+    case 'pl-tools': listToolsSheet(d.key); break;
+    case 'sel-start': view.select = { page: decodeURIComponent(location.hash.slice(1)), key: d.key, ids: new Set() }; rerender(); break;
+    case 'sel-cancel': view.select = null; rerender(); break;
+    case 'sel-all': listArr(view.select.key).forEach((id) => view.select.ids.add(id)); rerender(); break;
+    case 'sel-remove': {
+      const { key, ids } = view.select;
+      if (!ids.size) { toast('Tap videos to select them'); break; }
+      setListArr(key, listArr(key).filter((id) => !ids.has(id)));
+      toast(`Removed ${ids.size} video${ids.size === 1 ? '' : 's'}`);
+      view.select = null; rerender();
+      break;
+    }
     case 'edit-cancel': leaveEdit(); break;
     case 'toggle-comic':
       state.settings.comic = !state.settings.comic; save(); applyTheme(); rerender();
@@ -1991,7 +2680,7 @@ refreshSeeds().then(() => { if (!$('#sheet-root').innerHTML && !location.hash.st
 
 // Update check: version.json is published with every release. When it no longer
 // matches this build, offer a one-tap refresh instead of waiting for caches to expire.
-const APP_VERSION = '13';
+const APP_VERSION = '14';
 async function checkForUpdate() {
   try {
     const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
