@@ -5,7 +5,7 @@ My own YouTube-style app — a home feed, Shorts, subscriptions, playlists and a
 ## Features
 - **Home**: a feed of your saved videos, with filter chips (Your custom feed, All, New to you, and your own categories), a Shorts shelf, and a shuffle button.
 - **Shorts**: a full-screen vertical feed you swipe through.
-- **+ button**: paste one or more YouTube links (videos or Shorts). Titles and channels are filled in for you. It also checks your clipboard for a link.
+- **Adding YouTube videos**: paste a YouTube link into Search and tap "Add video from link" (or share to MyTube on Android). Titles and channels are filled in for you.
 - **Subscriptions**: a row of channel avatars, plus All / Today / Videos / Shorts / Continue watching filters.
 - **You**: your profile (name, handle, photo, color), history, Liked videos, Watch later, and your playlists.
 - **Player**: plays full screen, then shrinks to a mini player while you browse. It remembers where you stopped, plays the next video in the queue, and lets you like, save, share or subscribe.

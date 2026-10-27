@@ -590,7 +590,7 @@ body.on-shorts #player.mini { display: none; }
 .cozy-check input:checked + .box::after { content: "✔"; color: #7a3e1d; font-size: 20px; font-weight: 700; }
 .cozy-check input:focus-visible + .box { outline: 2px solid #fff; outline-offset: 2px; }
 .cozy-go { text-align: right; margin: 16px 18px 6px 0; font-size: 22px; font-weight: 700; color: #ffe8b0; -webkit-text-stroke: 1.5px #9a4a2a; paint-order: stroke fill; }
-.cozy-actions { display: flex; gap: 14px; padding-bottom: 6px; }
+.cozy-actions { display: flex; gap: 14px; margin-top: 26px; padding-bottom: 6px; }
 .cloud-btn, .candy-btn { flex: 1; font-family: inherit; font-size: 19px; font-weight: 600; padding: 15px 10px; }
 .cloud-btn { color: #6d4f86; background: linear-gradient(180deg, #e5c9ef, #c9a6dc); border-radius: 30px 36px 30px 38px / 34px 30px 38px 30px; box-shadow: inset 0 3px 0 rgba(255,255,255,.6), 0 0 0 3px #a27bb8; }
 .candy-btn { color: #fff; background: linear-gradient(180deg, #ff9a6b, #ff5e4a); border-radius: 999px; box-shadow: inset 0 3px 0 rgba(255,255,255,.45), 0 0 0 3px #b8402f, 0 6px 18px rgba(255,94,74,.5); text-shadow: 0 1px 2px rgba(120,30,20,.5); }

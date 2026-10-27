@@ -1221,18 +1221,15 @@ function addSheet(prefill = '') {
       <input type="file" id="add-files" accept="video/*" multiple hidden>
     </label>
     <div class="upload-progress hidden" id="add-progress"><div class="bar"><div id="add-progress-bar"></div></div><div class="sub" id="add-progress-text"></div></div>
-    <div class="cozy-or"><span>or paste YouTube links</span></div>
-    <textarea class="cozy-input" id="add-links" placeholder="https://youtu.be/…">${esc(prefill)}</textarea>
     <label class="cozy-label" for="add-cat">Category</label>
     <div class="cozy-select"><select class="cozy-input" id="add-cat">${categoryOptions('')}</select><span aria-hidden="true">⭐</span></div>
     <input class="cozy-input hidden" id="add-newcat" type="text" placeholder="Category name">
-    <label class="cozy-check"><input type="checkbox" id="add-sub"><span class="box"></span><span>☀️ Subscribe to the channel</span></label>
-    <label class="cozy-check"><input type="checkbox" id="add-short"><span class="box"></span><span>Treat all as Shorts ⚡</span></label>
-    <div class="cozy-go">Let's Go! 🚀</div>
     <div class="cozy-actions"><button class="cloud-btn" data-x="cancel">Cancel</button><button class="candy-btn" data-x="go">Import videos</button></div>
   </div>`, (s) => {
     s.classList.add('cozy');
-    const ta = $('#add-links', s);
+    // Links shared into the app (Android share menu) arrive as prefill and are added on Import.
+    const prefillLinks = findLinks(prefill);
+    if (prefillLinks.length) $('#add-staged', s).textContent = `🔗 ${prefillLinks.length} YouTube link${prefillLinks.length === 1 ? '' : 's'} ready`;
     const cat = () => { const c = $('#add-cat', s).value; return c === '__new' ? $('#add-newcat', s).value.trim() : c; };
     $('#add-cat', s).addEventListener('change', (e) => $('#add-newcat', s).classList.toggle('hidden', e.target.value !== '__new'));
     $('#add-files', s).addEventListener('change', (e) => {
@@ -1244,23 +1241,22 @@ function addSheet(prefill = '') {
       const x = e.target.closest('[data-x]')?.dataset.x;
       if (x === 'cancel') closeSheet();
       if (x !== 'go') return;
-      const links = findLinks(ta.value);
-      if (!staged.length && !links.length) { toast('Pick a video or paste a YouTube link first'); return; }
+      const links = prefillLinks;
+      if (!staged.length && !links.length) { toast('Pick a video first'); return; }
       s.querySelectorAll('button, textarea, select, input').forEach((el) => { el.disabled = true; });
       e.target.textContent = 'Importing…';
-      const allShort = $('#add-short', s).checked;
       let n = 0;
       if (staged.length) {
         $('#add-progress', s).classList.remove('hidden');
         n += await importFiles(staged, {
-          category: cat(), allShort,
+          category: cat(),
           onProgress: (i, total, name) => {
             $('#add-progress-bar', s).style.width = ((i - 1) / total * 100) + '%';
             $('#add-progress-text', s).textContent = `Saving ${i} of ${total}: ${name}`;
           },
         });
       }
-      if (links.length) n += await addVideos(links, { category: cat(), subscribe: $('#add-sub', s).checked, allShort });
+      if (links.length) n += await addVideos(links, { category: cat() });
       closeSheet();
       toast(n ? `Imported ${n} video${n === 1 ? '' : 's'} 🎉` : 'Nothing was imported');
       if (n) burstAt(innerWidth / 2, innerHeight * 0.55, 'confetti');
