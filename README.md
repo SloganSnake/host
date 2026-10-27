@@ -10,6 +10,9 @@ My own YouTube-style app — a home feed, Shorts, subscriptions, playlists and a
 - **You**: your profile (name, handle, photo, color), history, Liked videos, Watch later, and your playlists.
 - **Player**: plays full screen, then shrinks to a mini player while you browse. It remembers where you stopped, plays the next video in the queue, and lets you like, save, share or subscribe.
 - **Search** through your library, or paste a link into it to add the video.
+- **Upload from your phone**: pick videos from Photos or Files with the + button. They are saved on the phone (IndexedDB), play offline, and show up under Downloaded.
+- **Views & likes**: real YouTube view and like counts (via the Return YouTube Dislike API); your uploads count your own plays.
+- **Comments**: write your own private comments on any video.
 - **Settings**: dark or light theme, autoplay, back up / restore your data, clear history.
 
 ## Run it
