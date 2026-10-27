@@ -361,7 +361,7 @@ function bigHeart(container) {
 // A soft ripple from the finger on every button, card and link.
 document.addEventListener('pointerdown', (e) => {
   if (reduceMotion) return;
-  const el = e.target.closest('button, a, .thumb, label.btn, label.pill-btn, label.night-btn, label.cozy-drop, .style-opt, .swatch');
+  const el = e.target.closest('button, a, .thumb, label.btn, label.pill-btn, label.night-btn, label.mono-drop, .style-opt, .swatch');
   if (!el || el.disabled || e.target.closest('.short .frame, #yt-host')) return;
   const r = el.getBoundingClientRect();
   if (r.width * r.height > 300000) return;
@@ -1202,50 +1202,78 @@ function removeVideo(id) {
 }
 
 function categoryOptions(selected) {
-  const cats = [...new Set(['Music', 'Gaming', 'Comedy', 'Film', 'Education', 'Sports', 'Podcasts', 'Vlogs', ...Object.values(state.videos).map((v) => v.category).filter(Boolean)])].sort();
+  const cats = [...new Set(['Music', 'Gaming', 'Comedy', 'Film', 'Education', 'Sports', 'Podcasts', 'Vlogs', 'Tutorials', ...Object.values(state.videos).map((v) => v.category).filter(Boolean)])].sort();
   return `<option value="">Auto / none</option>${cats.map((c) => `<option ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">New category…</option>`;
 }
 
+const QUICK_CATS = [['Gaming', '🎮'], ['Music', '🎵'], ['Vlogs', '🎥'], ['Tutorials', '📚'], ['Comedy', '😂'], ['Sports', '⚽'], ['Film', '🎬'], ['Podcasts', '🎙️']];
+// Concentric rings and loose pencil scribbles; the scribble filter's seed steps
+// a few times a second so the lines "boil" like hand-drawn animation.
+function monoArt() {
+  const boil = reduceMotion ? '' : '<animate attributeName="seed" values="1;4;7;10" dur=".6s" repeatCount="indefinite" calcMode="discrete"/>';
+  const scribbles = [[118, 112, -8], [124, 118, 14], [100, 104, 4], [132, 126, -20], [90, 86, 30]]
+    .map(([rx, ry, rot]) => `<ellipse cx="150" cy="150" rx="${rx}" ry="${ry}" transform="rotate(${rot} 150 150)"/>`).join('');
+  return `<svg class="mono-art" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <defs>
+      <radialGradient id="monoCore" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#2a2a2e"/><stop offset="1" stop-color="#0c0c0e"/></radialGradient>
+      <filter id="boil" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="1">${boil}</feTurbulence>
+        <feDisplacementMap in="SourceGraphic" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+    <circle class="ring" cx="150" cy="150" r="128"/>
+    <circle class="ring bold" cx="150" cy="150" r="108"/>
+    <circle class="core" cx="150" cy="150" r="84"/>
+    <g class="arcs"><path d="M150 54a96 96 0 0 1 83 48"/><path d="M66 198a96 96 0 0 1-8-30"/></g>
+    <g class="arcs rev"><path d="M196 214a74 74 0 0 1-60 9"/><path d="M90 104a74 74 0 0 1 36-24"/></g>
+    <g class="scribble" filter="url(#boil)">${scribbles}</g>
+  </svg>`;
+}
 function addSheet(prefill = '') {
   let staged = [];
-  const sparks = Array.from({ length: 18 }, (_, i) =>
-    `<i style="left:${(i * 53) % 100}%;top:${(i * 37) % 100}%;animation-delay:${(i % 6) * 0.5}s"></i>`).join('');
-  openSheet(`<div class="cozy-add">
-    <div class="cozy-sky" aria-hidden="true">${sparks}<span class="cozy-sun">${SUN_SVG}</span></div>
-    <h3 class="cozy-title">Add videos</h3>
-    <label class="cozy-drop" for="add-files">
-      <div class="cozy-scene" aria-hidden="true"><span class="scene-sun"></span><span class="cloud c1"></span><span class="cloud c2"></span><span class="sea"></span></div>
-      <span class="floaty f1">🎥</span><span class="floaty f2">🍿</span><span class="floaty f3">🎵</span><span class="floaty f4">💾</span><span class="floaty f5">🪐</span>
-      <span class="drop-arrow">${icon('upload')}</span>
-      <span class="drop-text"><b class="candy-text">Upload from your phone!</b>
-        <span>Pick videos from Photos or Files. They're saved on this phone and play offline 🎥🍿</span>
-        <span class="staged" id="add-staged"></span></span>
+  openSheet(`<div class="mono-add">
+    <h3 class="mono-title">Add videos</h3>
+    <label class="mono-drop" for="add-files" aria-label="Upload videos from your phone">
+      ${monoArt()}
+      <span class="mono-arrow">${icon('upload')}</span>
+      <span class="tap-hint">Tap to pick videos from your phone</span>
+      <span class="staged" id="add-staged"></span>
       <input type="file" id="add-files" accept="video/*" multiple hidden>
     </label>
     <div class="upload-progress hidden" id="add-progress"><div class="bar"><div id="add-progress-bar"></div></div><div class="sub" id="add-progress-text"></div></div>
-    <label class="cozy-label" for="add-cat">Category</label>
-    <div class="cozy-select"><select class="cozy-input" id="add-cat">${categoryOptions('')}</select><span aria-hidden="true">⭐</span></div>
-    <input class="cozy-input hidden" id="add-newcat" type="text" placeholder="Category name">
-    <div class="cozy-actions"><button class="cloud-btn" data-x="cancel">Cancel</button><button class="candy-btn" data-x="go">Import videos</button></div>
+    <label class="mono-label" for="add-cat">Category</label>
+    <div class="mono-select"><span class="hash" aria-hidden="true">#</span><select id="add-cat">${categoryOptions('')}</select><span class="star" aria-hidden="true">★</span></div>
+    <input class="mono-input hidden" id="add-newcat" type="text" placeholder="Category name">
+    <div class="mono-chips">${QUICK_CATS.map(([c, e]) => `<button class="mono-chip" data-cat="${c}">${c} ${e}</button>`).join('')}</div>
+    <div class="mono-actions"><button class="mono-cancel" data-x="cancel">Cancel</button><button class="mono-import" data-x="go">Import videos</button></div>
   </div>`, (s) => {
-    s.classList.add('cozy');
+    s.classList.add('mono');
     // Links shared into the app (Android share menu) arrive as prefill and are added on Import.
     const prefillLinks = findLinks(prefill);
     if (prefillLinks.length) $('#add-staged', s).textContent = `🔗 ${prefillLinks.length} YouTube link${prefillLinks.length === 1 ? '' : 's'} ready`;
-    const cat = () => { const c = $('#add-cat', s).value; return c === '__new' ? $('#add-newcat', s).value.trim() : c; };
-    $('#add-cat', s).addEventListener('change', (e) => $('#add-newcat', s).classList.toggle('hidden', e.target.value !== '__new'));
+    const sel = $('#add-cat', s);
+    const cat = () => sel.value === '__new' ? $('#add-newcat', s).value.trim() : sel.value;
+    const syncChips = () => s.querySelectorAll('.mono-chip').forEach((c) => c.classList.toggle('on', c.dataset.cat === sel.value));
+    sel.addEventListener('change', () => { $('#add-newcat', s).classList.toggle('hidden', sel.value !== '__new'); syncChips(); });
     $('#add-files', s).addEventListener('change', (e) => {
       staged = [...e.target.files].filter(isVideoFile);
-      $('#add-staged', s).textContent = staged.length ? `📼 ${staged.length} video${staged.length === 1 ? '' : 's'} ready: ${staged.map((f) => f.name).join(', ')}` : (e.target.files.length ? 'Those files are not videos' : '');
-      s.querySelector('.cozy-drop').classList.toggle('ready', staged.length > 0);
+      $('#add-staged', s).textContent = staged.length ? `${staged.length} video${staged.length === 1 ? '' : 's'} ready · ${staged.map((f) => f.name).join(', ')}` : (e.target.files.length ? 'Those files are not videos' : '');
+      s.querySelector('.mono-drop').classList.toggle('ready', staged.length > 0);
     });
     s.addEventListener('click', async (e) => {
+      const chip = e.target.closest('.mono-chip');
+      if (chip) {
+        sel.value = sel.value === chip.dataset.cat ? '' : chip.dataset.cat;
+        $('#add-newcat', s).classList.add('hidden');
+        syncChips(); pop(chip);
+        return;
+      }
       const x = e.target.closest('[data-x]')?.dataset.x;
       if (x === 'cancel') closeSheet();
       if (x !== 'go') return;
       const links = prefillLinks;
-      if (!staged.length && !links.length) { toast('Pick a video first'); return; }
-      s.querySelectorAll('button, textarea, select, input').forEach((el) => { el.disabled = true; });
+      if (!staged.length && !links.length) { toast('Pick a video first'); shake(s.querySelector('.mono-drop')); return; }
+      s.querySelectorAll('button, select, input').forEach((el) => { el.disabled = true; });
       e.target.textContent = 'Importing…';
       let n = 0;
       if (staged.length) {
@@ -1267,10 +1295,6 @@ function addSheet(prefill = '') {
     });
   });
 }
-const SUN_SVG = `<svg viewBox="0 0 64 64"><g stroke="#ffd36b" stroke-width="3" stroke-linecap="round">${Array.from({ length: 8 }, (_, i) => {
-  const a = i * Math.PI / 4, x1 = 32 + Math.cos(a) * 22, y1 = 32 + Math.sin(a) * 22, x2 = 32 + Math.cos(a) * 29, y2 = 32 + Math.sin(a) * 29;
-  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
-}).join('')}</g><circle cx="32" cy="32" r="17" fill="#ffd36b"/><path d="M24 32q3 3 6 0M34 32q3 3 6 0" stroke="#a8642a" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="23" cy="37" r="2.5" fill="#ff9b7b" opacity=".7"/><circle cx="41" cy="37" r="2.5" fill="#ff9b7b" opacity=".7"/><path d="M29 39q3 2.5 6 0" stroke="#a8642a" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 
 async function addVideos(links, { category = '', subscribe = false, allShort = false } = {}) {
   let n = 0;

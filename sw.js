@@ -1,5 +1,5 @@
 // Network-first cache of the app shell so MyTube opens offline.
-const CACHE = 'mytube-v11';
+const CACHE = 'mytube-v12';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
