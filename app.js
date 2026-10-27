@@ -141,9 +141,11 @@ function hashColor(str) {
   for (const c of String(str)) h = (h * 31 + c.codePointAt(0)) >>> 0;
   return `hsl(${h % 360} 55% 42%)`;
 }
+const RAINBOW = 'linear-gradient(135deg, #ff6b9a, #ffb86b, #ffe66b, #7bdc9a, #6bc5ff, #b56bff)';
+const colorCss = (c) => c === 'rainbow' ? RAINBOW : c;
 function avatar(name, size = 36, photo, color) {
   const inner = photo ? `<img src="${esc(photo)}" alt="">` : esc((name || '?').trim().charAt(0).toUpperCase());
-  return `<span class="avatar av-${size}" style="background:${color || hashColor(name)}">${inner}</span>`;
+  return `<span class="avatar av-${size}" style="background:${colorCss(color || hashColor(name))}">${inner}</span>`;
 }
 // Profile styling: a font and effect for your name, and a frame around your picture.
 const FONTS = {
@@ -159,8 +161,10 @@ const FONTS = {
   glitch: ['Glitch', "'Rubik Glitch', sans-serif"],
   bangers: ['Bangers', "'Bangers', cursive"],
 };
-const FRAMES = { none: 'None', rainbow: 'Rainbow', neon: 'Neon', fire: 'Fire', gold: 'Gold', galaxy: 'Galaxy', ice: 'Ice' };
-const NAME_FX = { plain: 'Plain', rainbow: 'Rainbow', glow: 'Neon glow', fire: 'Fire', gold: 'Gold' };
+const FRAMES = { none: 'None', rainbow: 'Rainbow', neon: 'Neon', fire: 'Fire', gold: 'Gold', galaxy: 'Galaxy', ice: 'Ice', crown: 'Crown', moon: 'Moon', blossom: 'Blossom', sparkle: 'Sparkle', lantern: 'Lantern' };
+const NAME_FX = { plain: 'Plain', rainbow: 'Rainbow', glow: 'Neon glow', fire: 'Fire', gold: 'Gold', sparkle: 'Sparkle' };
+const PRIMARY_COLORS = ['#8b7cf6', '#f6a77c', '#7fb88a', '#5b3cc4', '#e05a5a', '#b98bc9', '#1a73e8', 'rainbow'];
+const ACCENT_COLORS = ['#ff0033', '#ff8a5c', '#3ccf91', '#3ea6ff', '#8b5cf6', '#ff4fa3', '#f5b300'];
 function styledName(text, p = state.profile) {
   const f = FONTS[p.font] ? p.font : '';
   return `<span class="uname font-${f || 'default'} fx-${p.nameFx || 'plain'}" style="font-family:${FONTS[f][1]}">${esc(text)}</span>`;
@@ -169,7 +173,7 @@ const myName = (text) => styledName(text);
 function profileAvatar(size, p = state.profile) {
   const a = avatar(p.name, size, p.photo, p.color);
   const fr = FRAMES[p.frame] ? p.frame : 'none';
-  return fr === 'none' ? a : `<span class="pfp frame-${fr} ${size <= 36 ? 'sm' : ''}">${a}</span>`;
+  return fr === 'none' ? a : `<span class="pfp frame-${fr} ${size <= 36 ? 'sm' : ''}" style="--s:${size}px">${a}</span>`;
 }
 // Your uploads show your own profile picture as the channel avatar.
 const chName = (v) => v.local ? myName(v.channel) : esc(v.channel);
@@ -554,11 +558,13 @@ function renderYou() {
   const shortsGroup = histShorts.length ? `<div class="hcard"><a class="thumb shorts-group" href="#shorts/${histShorts[0].id}">
       ${histShorts.slice(0, 3).map((v) => `<img loading="lazy" src="${thumb(v.id)}" alt="">`).join('')}<span class="badge">${icon('shorts')}</span></a>
       <div class="meta"><a class="text" href="#shorts/${histShorts[0].id}"><div class="title">Shorts</div><div class="sub">${histShorts.length} watched</div></a></div></div>` : '';
-  return `<div class="you-head" style="--pc:${esc(p.color)}">
+  const headStyle = p.color === 'rainbow' ? 'background:linear-gradient(180deg, rgba(255,107,154,.4), rgba(107,197,255,.22) 60%, transparent)' : `--pc:${esc(p.color)}`;
+  return `<div class="you-head ${p.banner ? 'has-banner' : ''}" style="${headStyle}">
+    ${p.banner ? `<div class="banner" style="background-image:url('${p.banner}')"></div>` : ''}
     <header class="topbar"><button class="pill-btn" data-action="edit-profile">${icon('user')} Profile ${icon('down')}</button><div class="spacer"></div>
       <a class="icon-btn" href="#search" aria-label="Search">${icon('search')}</a>
       <button class="icon-btn" data-action="settings" aria-label="Settings">${icon('gear')}</button></header>
-    <div class="profile">${profileAvatar(88)}<div><h1>${myName(p.name)}</h1><div class="handle">${esc(p.handle)}</div></div></div>
+    <div class="profile">${profileAvatar(88)}<div><h1>${myName(p.name)}</h1><div class="handle">${esc(p.handle)}${p.pronouns ? ` · ${esc(p.pronouns)}` : ''}</div></div></div>
     <div class="btn-row"><a class="btn primary" href="#channel/${encodeURIComponent(p.name)}">View channel</a><button class="btn" data-action="add">Upload video</button></div>
   </div>
   <a class="section-title" href="#history">History ${icon('right')}</a>
@@ -720,12 +726,14 @@ function route(animate) {
     }
     case 'channel': html = renderChannel(arg); break;
     case 'edit': html = renderEdit(arg); break;
+    case 'profile': html = renderProfileEdit(); break;
     default: html = renderHome();
   }
   if (page !== 'edit') editDraft = null;
+  if (page !== 'profile' && profDraft) { profDraft = null; applyTheme(); }
   main.classList.toggle('enter', !!animate && !reduceMotion);
   main.innerHTML = html;
-  const tab = { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
+  const tab = { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit', 'profile'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   $('#tab-avatar').innerHTML = profileAvatar(28);
   document.body.classList.toggle('on-shorts', page === 'shorts');
@@ -1025,53 +1033,73 @@ function categoryOptions(selected) {
 }
 
 function addSheet(prefill = '') {
-  openSheet(`
-    <h3>Add videos</h3>
-    <label class="upload-drop" for="add-files">${icon('upload')}<div><b>Upload from your phone</b><div class="sub">Pick videos from Photos or Files. They're saved on this phone and play offline.</div></div>
-      <input type="file" id="add-files" accept="video/*" multiple hidden></label>
+  let staged = [];
+  const sparks = Array.from({ length: 18 }, (_, i) =>
+    `<i style="left:${(i * 53) % 100}%;top:${(i * 37) % 100}%;animation-delay:${(i % 6) * 0.5}s"></i>`).join('');
+  openSheet(`<div class="cozy-add">
+    <div class="cozy-sky" aria-hidden="true">${sparks}<span class="cozy-sun">${SUN_SVG}</span></div>
+    <h3 class="cozy-title">Add videos</h3>
+    <label class="cozy-drop" for="add-files">
+      <div class="cozy-scene" aria-hidden="true"><span class="scene-sun"></span><span class="cloud c1"></span><span class="cloud c2"></span><span class="sea"></span></div>
+      <span class="floaty f1">🎥</span><span class="floaty f2">🍿</span><span class="floaty f3">🎵</span><span class="floaty f4">💾</span><span class="floaty f5">🪐</span>
+      <span class="drop-arrow">${icon('upload')}</span>
+      <span class="drop-text"><b class="candy-text">Upload from your phone!</b>
+        <span>Pick videos from Photos or Files. They're saved on this phone and play offline 🎥🍿</span>
+        <span class="staged" id="add-staged"></span></span>
+      <input type="file" id="add-files" accept="video/*" multiple hidden>
+    </label>
     <div class="upload-progress hidden" id="add-progress"><div class="bar"><div id="add-progress-bar"></div></div><div class="sub" id="add-progress-text"></div></div>
-    <div class="or"><span>or paste YouTube links</span></div>
-    <div class="field"><textarea id="add-links" placeholder="https://youtu.be/…&#10;https://www.youtube.com/shorts/…">${esc(prefill)}</textarea></div>
-    <div class="hint">In the YouTube app tap Share → Copy link, then paste here. Shorts are detected automatically.</div>
-    <div class="field"><label for="add-cat">Category</label><select id="add-cat">${categoryOptions('')}</select></div>
-    <div class="field hidden" id="add-newcat-wrap"><input id="add-newcat" type="text" placeholder="Category name"></div>
-    <label class="check"><input type="checkbox" id="add-sub"> Subscribe to the channel</label>
-    <label class="check"><input type="checkbox" id="add-short"> Treat all as Shorts</label>
-    <div class="row"><button class="btn" data-x="cancel">Cancel</button><button class="btn red" data-x="go">Add links</button></div>`, (s) => {
+    <div class="cozy-or"><span>or paste YouTube links</span></div>
+    <textarea class="cozy-input" id="add-links" placeholder="https://youtu.be/…">${esc(prefill)}</textarea>
+    <label class="cozy-label" for="add-cat">Category</label>
+    <div class="cozy-select"><select class="cozy-input" id="add-cat">${categoryOptions('')}</select><span aria-hidden="true">⭐</span></div>
+    <input class="cozy-input hidden" id="add-newcat" type="text" placeholder="Category name">
+    <label class="cozy-check"><input type="checkbox" id="add-sub"><span class="box"></span><span>☀️ Subscribe to the channel</span></label>
+    <label class="cozy-check"><input type="checkbox" id="add-short"><span class="box"></span><span>Treat all as Shorts ⚡</span></label>
+    <div class="cozy-go">Let's Go! 🚀</div>
+    <div class="cozy-actions"><button class="cloud-btn" data-x="cancel">Cancel</button><button class="candy-btn" data-x="go">Import videos</button></div>
+  </div>`, (s) => {
+    s.classList.add('cozy');
     const ta = $('#add-links', s);
     const cat = () => { const c = $('#add-cat', s).value; return c === '__new' ? $('#add-newcat', s).value.trim() : c; };
-    $('#add-cat', s).addEventListener('change', (e) => $('#add-newcat-wrap', s).classList.toggle('hidden', e.target.value !== '__new'));
-    $('#add-files', s).addEventListener('change', async (e) => {
-      const files = [...e.target.files];
-      if (!files.length) return;
-      $('#add-progress', s).classList.remove('hidden');
-      s.querySelectorAll('button, textarea, select, input').forEach((el) => { el.disabled = true; });
-      const n = await importFiles(files, {
-        category: cat(), allShort: $('#add-short', s).checked,
-        onProgress: (i, total, name) => {
-          $('#add-progress-bar', s).style.width = ((i - 1) / total * 100) + '%';
-          $('#add-progress-text', s).textContent = `Saving ${i} of ${total}: ${name}`;
-        },
-      });
-      closeSheet();
-      toast(n ? `Uploaded ${n} video${n === 1 ? '' : 's'}` : 'Those files are not videos');
-      if (n) { view.homeChip = 'Your uploads'; location.hash === '#home' ? rerender() : (location.hash = '#home'); }
+    $('#add-cat', s).addEventListener('change', (e) => $('#add-newcat', s).classList.toggle('hidden', e.target.value !== '__new'));
+    $('#add-files', s).addEventListener('change', (e) => {
+      staged = [...e.target.files].filter(isVideoFile);
+      $('#add-staged', s).textContent = staged.length ? `📼 ${staged.length} video${staged.length === 1 ? '' : 's'} ready: ${staged.map((f) => f.name).join(', ')}` : (e.target.files.length ? 'Those files are not videos' : '');
+      s.querySelector('.cozy-drop').classList.toggle('ready', staged.length > 0);
     });
     s.addEventListener('click', async (e) => {
       const x = e.target.closest('[data-x]')?.dataset.x;
       if (x === 'cancel') closeSheet();
       if (x !== 'go') return;
       const links = findLinks(ta.value);
-      if (!links.length) { toast('No YouTube links found'); return; }
-      const subscribe = $('#add-sub', s).checked, allShort = $('#add-short', s).checked;
-      e.target.disabled = true; e.target.textContent = 'Adding…';
-      const n = await addVideos(links, { category: cat(), subscribe, allShort });
+      if (!staged.length && !links.length) { toast('Pick a video or paste a YouTube link first'); return; }
+      s.querySelectorAll('button, textarea, select, input').forEach((el) => { el.disabled = true; });
+      e.target.textContent = 'Importing…';
+      const allShort = $('#add-short', s).checked;
+      let n = 0;
+      if (staged.length) {
+        $('#add-progress', s).classList.remove('hidden');
+        n += await importFiles(staged, {
+          category: cat(), allShort,
+          onProgress: (i, total, name) => {
+            $('#add-progress-bar', s).style.width = ((i - 1) / total * 100) + '%';
+            $('#add-progress-text', s).textContent = `Saving ${i} of ${total}: ${name}`;
+          },
+        });
+      }
+      if (links.length) n += await addVideos(links, { category: cat(), subscribe: $('#add-sub', s).checked, allShort });
       closeSheet();
-      toast(`Added ${n} video${n === 1 ? '' : 's'}`);
+      toast(n ? `Imported ${n} video${n === 1 ? '' : 's'} 🎉` : 'Nothing was imported');
+      if (staged.length && n) { view.homeChip = 'Your uploads'; if (location.hash !== '#home') { location.hash = '#home'; return; } }
       rerender();
     });
   });
 }
+const SUN_SVG = `<svg viewBox="0 0 64 64"><g stroke="#ffd36b" stroke-width="3" stroke-linecap="round">${Array.from({ length: 8 }, (_, i) => {
+  const a = i * Math.PI / 4, x1 = 32 + Math.cos(a) * 22, y1 = 32 + Math.sin(a) * 22, x2 = 32 + Math.cos(a) * 29, y2 = 32 + Math.sin(a) * 29;
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+}).join('')}</g><circle cx="32" cy="32" r="17" fill="#ffd36b"/><path d="M24 32q3 3 6 0M34 32q3 3 6 0" stroke="#a8642a" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="23" cy="37" r="2.5" fill="#ff9b7b" opacity=".7"/><circle cx="41" cy="37" r="2.5" fill="#ff9b7b" opacity=".7"/><path d="M29 39q3 2.5 6 0" stroke="#a8642a" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 
 async function addVideos(links, { category = '', subscribe = false, allShort = false } = {}) {
   let n = 0;
@@ -1399,74 +1427,119 @@ function manageSubsSheet() {
   });
 }
 
-const SWATCHES = ['#5b3cc4', '#c4302b', '#0f9d58', '#1a73e8', '#f4b400', '#e91e63', '#00897b', '#424242'];
-function editProfileSheet() {
+// ---------------------------------------------------------------- edit profile page
+document.addEventListener('click', (e) => {
+  const b = profDraft && e.target.closest('#main [data-k][data-v]');
+  if (!b) return;
+  profDraft[b.dataset.k] = b.dataset.v;
+  // Preview the accent across the app right away; Cancel puts it back.
+  if (b.dataset.k === 'accent') document.documentElement.style.setProperty('--accent', b.dataset.v);
+  rerender();
+});
+let profDraft = null;
+const PROFILE_KEYS = ['name', 'handle', 'pronouns', 'photo', 'banner', 'color', 'font', 'nameFx', 'frame'];
+function renderProfileEdit() {
   const p = state.profile;
-  const d = { photo: p.photo, color: p.color, font: p.font || '', nameFx: p.nameFx || 'plain', frame: p.frame || 'none' };
-  const picker = (key, options, render) => `<div class="style-picker">${Object.entries(options).map(([k, label]) =>
-    `<button class="style-opt ${d[key] === k ? 'on' : ''}" data-k="${key}" data-v="${k}">${render(k, label)}</button>`).join('')}</div>`;
-  openSheet(`<h3>Edit profile</h3>
-    <div class="ep-preview" id="ep-preview"></div>
-    <div class="field" style="display:flex;gap:8px;flex-wrap:wrap"><label class="pill-btn" style="margin:0;color:var(--fg)">${icon('upload')} Upload photo<input type="file" id="ep-file" accept="image/*" hidden></label>
-      <button class="pill-btn" data-x="nophoto">Remove photo</button></div>
-    <div class="field"><label>Name</label><input type="text" id="ep-name" value="${esc(p.name)}"></div>
-    <div class="field"><label>Handle</label><input type="text" id="ep-handle" value="${esc(p.handle)}"></div>
-    <div class="field"><label>Picture frame</label>${picker('frame', FRAMES, (k, label) =>
-      `${profileAvatar(36, { ...p, ...d, frame: k })}<span>${label}</span>`)}</div>
-    <div class="field"><label>Name font</label>${picker('font', Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v[0]])), (k, label) =>
-      `<span class="font-${k || 'default'}" style="font-family:${FONTS[k][1]};font-size:17px">Aa</span><span>${label}</span>`)}</div>
-    <div class="field"><label>Name effect</label>${picker('nameFx', NAME_FX, (k, label) =>
-      `<span class="uname fx-${k}" style="font-weight:700;font-size:17px">Aa</span><span>${label}</span>`)}</div>
-    <div class="field"><label>Color</label><div class="swatches">${SWATCHES.map((c) => `<button class="swatch ${c === d.color ? 'on' : ''}" style="background:${c}" data-color="${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>
-    <div class="row"><button class="btn" data-x="cancel">Cancel</button><button class="btn red" data-x="go">Save</button></div>`, (s) => {
-    const draft = () => ({ ...p, ...d, name: $('#ep-name', s).value || p.name, handle: $('#ep-handle', s).value || p.handle });
-    const refresh = () => {
-      const q = draft();
-      $('#ep-preview', s).innerHTML = `${profileAvatar(88, q)}<div><div class="ep-name">${styledName(q.name, q)}</div><div class="handle">${esc(q.handle)}</div></div>`;
+  if (!profDraft) {
+    profDraft = Object.fromEntries(PROFILE_KEYS.map((k) => [k, p[k] ?? '']));
+    profDraft.accent = state.settings.accent || '#ff0033';
+    profDraft.font ||= ''; profDraft.nameFx ||= 'plain'; profDraft.frame ||= 'none';
+  }
+  const d = profDraft;
+  const tiles = (key, options, render, cls = '') => `<div class="style-picker">${Object.entries(options).map(([k, label]) =>
+    `<button class="style-opt ${cls}${cls ? k : ''} ${d[key] === k ? 'on' : ''}" data-k="${key}" data-v="${k}">${render(k, label)}</button>`).join('')}</div>`;
+  const stars = Array.from({ length: 40 }, (_, i) =>
+    `<i style="left:${(i * 61) % 100}%;top:${(i * 29) % 100}%;animation-delay:${(i % 7) * 0.6}s;${i % 5 ? '' : 'width:3px;height:3px'}"></i>`).join('');
+  return `<div class="cozy-night">
+    <div class="night-stars" aria-hidden="true">${stars}</div>
+    <header class="night-head"><button class="icon-btn" data-action="profile-cancel" aria-label="Back">${icon('back')}</button><h1>Edit Profile</h1></header>
+    <div class="banner-card" style="${d.banner ? `background-image:url('${d.banner}')` : ''}">
+      ${d.banner ? '' : '<div class="banner-art" aria-hidden="true"><span class="b-moon">🌙</span><span class="b-window"></span><span class="b-plant">🪴</span><span class="b-laptop">💻</span><span class="b-cup">☕</span></div>'}
+      <label class="banner-avatar" aria-label="Change avatar">${profileAvatar(88, d)}<span class="cam">📷</span><input type="file" accept="image/*" hidden data-pf-photo></label>
+      <div class="banner-btns">
+        <label class="night-btn">Change Avatar<input type="file" accept="image/*" hidden data-pf-photo></label>
+        <label class="night-btn">${d.banner ? 'Change Banner' : 'Add Banner'} 🖼️<input type="file" accept="image/*" hidden data-pf-banner></label>
+        ${d.photo || d.banner ? '<button class="night-btn small" data-action="profile-clear-images">Remove pictures</button>' : ''}
+      </div>
+    </div>
+    <div class="night-preview">${styledName(d.name || 'Your name', d)} <span>${esc(d.handle || '@you')}${d.pronouns ? ` · ${esc(d.pronouns)}` : ''}</span></div>
+    <label class="night-label" for="pf-name">Display name <span>✦</span></label>
+    <div class="night-input"><input id="pf-name" data-pf="name" value="${esc(d.name)}" maxlength="40">${icon('edit')}</div>
+    <label class="night-label" for="pf-handle">Handle</label>
+    <div class="night-input"><input id="pf-handle" data-pf="handle" value="${esc(d.handle)}" maxlength="30" autocapitalize="off">${icon('edit')}</div>
+    <label class="night-label" for="pf-pronouns">Pronouns</label>
+    <div class="night-input"><input id="pf-pronouns" data-pf="pronouns" value="${esc(d.pronouns)}" maxlength="30" placeholder="e.g. he/they">${icon('edit')}</div>
+    <div class="night-label">Avatar decorations <span>✦</span></div>
+    ${tiles('frame', FRAMES, (k, label) => `${profileAvatar(44, { ...d, frame: k })}<span>${label}</span>`)}
+    <div class="night-label">Display name style</div>
+    ${tiles('font', Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v[0]])), (k, label) =>
+      `<span class="font-${k || 'default'}" style="font-family:${FONTS[k][1]};font-size:22px">Aa</span><span style="font-family:${FONTS[k][1]}" class="font-${k || 'default'}">${label}</span>`)}
+    <div class="night-label">Profile effects</div>
+    ${tiles('nameFx', NAME_FX, (k, label) => `<span class="uname fx-${k}" style="font-weight:700;font-size:22px">Aa</span><span>${label}</span>`, 'fxtile-')}
+    <div class="night-label">Theme colors</div>
+    <div class="color-row"><span class="color-tag">Primary</span>${PRIMARY_COLORS.map((c) =>
+      `<button class="swatch ${c === 'rainbow' ? 'wide' : ''} ${d.color === c ? 'on' : ''}" style="background:${colorCss(c)}" data-k="color" data-v="${c}" aria-label="Primary ${c}"></button>`).join('')}</div>
+    <div class="color-row"><span class="color-tag">Accent</span>${ACCENT_COLORS.map((c) =>
+      `<button class="swatch ${d.accent === c ? 'on' : ''}" style="background:${c}" data-k="accent" data-v="${c}" aria-label="Accent ${c}"></button>`).join('')}</div>
+    <div class="night-hint">Accent recolors buttons, progress bars and highlights across MyTube.</div>
+    <div class="night-bar"><button class="night-cancel" data-action="profile-cancel">Cancel</button><button class="night-save" data-action="profile-save">Save Changes</button></div>
+  </div>`;
+}
+function refreshProfilePreview() {
+  const d = profDraft, pv = $('.night-preview');
+  if (pv) pv.innerHTML = `${styledName(d.name || 'Your name', d)} <span>${esc(d.handle || '@you')}${d.pronouns ? ` · ${esc(d.pronouns)}` : ''}</span>`;
+}
+function leaveProfile() {
+  profDraft = null;
+  applyTheme();
+  if (history.length > 1) history.back(); else location.hash = '#you';
+}
+function saveProfile() {
+  const d = profDraft, p = state.profile;
+  let handle = d.handle.trim();
+  if (handle && !handle.startsWith('@')) handle = '@' + handle;
+  const name = d.name.trim() || 'You';
+  // Your uploads follow your channel name.
+  if (name !== p.name) Object.values(state.videos).forEach((v) => { if (v.local && v.channel === p.name) v.channel = name; });
+  Object.assign(p, { name, handle: handle || '@me', pronouns: d.pronouns.trim(), photo: d.photo || null, banner: d.banner || null, color: d.color, font: d.font, nameFx: d.nameFx, frame: d.frame });
+  state.settings.accent = d.accent;
+  save(true);
+  toast('Profile saved ✨');
+  leaveProfile();
+}
+function cropImage(file, w, h, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.max(w / img.width, h / img.height);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, (w - img.width * scale) / 2, (h - img.height * scale) / 2, img.width * scale, img.height * scale);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', quality));
     };
-    $('#ep-name', s).addEventListener('input', refresh);
-    $('#ep-handle', s).addEventListener('input', refresh);
-    $('#ep-file', s).addEventListener('change', (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const img = new Image();
-      img.onload = () => {
-        const c = document.createElement('canvas'), n = 256, m = Math.min(img.width, img.height);
-        c.width = c.height = n;
-        c.getContext('2d').drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, n, n);
-        d.photo = c.toDataURL('image/jpeg', 0.85);
-        URL.revokeObjectURL(img.src);
-        refresh();
-      };
-      img.src = URL.createObjectURL(f);
-    });
-    s.addEventListener('click', (e) => {
-      const opt = e.target.closest('.style-opt, [data-color]');
-      if (opt) {
-        if (opt.dataset.color) d.color = opt.dataset.color; else d[opt.dataset.k] = opt.dataset.v;
-        opt.parentElement.querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
-        opt.classList.add('on');
-        refresh();
-        return;
-      }
-      const x = e.target.closest('[data-x]')?.dataset.x;
-      if (x === 'nophoto') { d.photo = null; refresh(); }
-      if (x === 'cancel') closeSheet();
-      if (x === 'go') {
-        let handle = $('#ep-handle', s).value.trim();
-        if (handle && !handle.startsWith('@')) handle = '@' + handle;
-        const oldName = p.name, name = $('#ep-name', s).value.trim() || 'You';
-        // Your uploads follow your channel name.
-        if (name !== oldName) Object.values(state.videos).forEach((v) => { if (v.local && v.channel === oldName) v.channel = name; });
-        Object.assign(state.profile, d, { name, handle: handle || '@me' });
-        save(); closeSheet(); rerender();
-        if (current) renderPlayerBody();
-        toast('Profile updated');
-      }
-    });
-    refresh();
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
   });
 }
+document.addEventListener('input', (e) => {
+  const key = e.target.dataset?.pf;
+  if (!key || !profDraft) return;
+  profDraft[key] = e.target.value;
+  refreshProfilePreview();
+});
+document.addEventListener('change', async (e) => {
+  if (!profDraft) return;
+  const isPhoto = e.target.matches('[data-pf-photo]'), isBanner = e.target.matches('[data-pf-banner]');
+  if (!isPhoto && !isBanner) return;
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    if (isPhoto) profDraft.photo = await cropImage(f, 256, 256, 0.85);
+    else profDraft.banner = await cropImage(f, 900, 340, 0.72);
+    rerender();
+  } catch { toast('That image could not be opened'); }
+});
 
 function settingsSheet() {
   const st = state.settings;
@@ -1592,6 +1665,9 @@ document.addEventListener('click', (e) => {
   switch (d.action) {
     case 'add': addSheet(); break;
     case 'edit-cancel': leaveEdit(); break;
+    case 'profile-cancel': leaveProfile(); break;
+    case 'profile-save': saveProfile(); break;
+    case 'profile-clear-images': profDraft.photo = ''; profDraft.banner = ''; rerender(); break;
     case 'edit-current': if (current) { const id = current; setPlayerMode('mini'); location.hash = '#edit/' + id; } break;
     case 'edit-save': saveEdit(); break;
     case 'edit-more': editDraft.more = true; rerender(); break;
@@ -1614,7 +1690,7 @@ document.addEventListener('click', (e) => {
     case 'desc-toggle': if (!e.target.closest('a')) t.classList.toggle('open'); break;
     case 'shuffle': view.shuffle = !view.shuffle; rerender(); break;
     case 'manage-subs': manageSubsSheet(); break;
-    case 'edit-profile': editProfileSheet(); break;
+    case 'edit-profile': location.hash = '#profile'; break;
     case 'settings': settingsSheet(); break;
     case 'new-playlist': newPlaylistSheet(); break;
     case 'playlist-menu': playlistMenu(d.pl); break;
@@ -1643,6 +1719,7 @@ document.addEventListener('keydown', (e) => {
 
 function applyTheme() {
   document.documentElement.dataset.theme = state.settings.theme;
+  document.documentElement.style.setProperty('--accent', state.settings.accent || '#ff0033');
   document.querySelector('meta[name=theme-color]').content = state.settings.theme === 'light' ? '#ffffff' : '#0f0f0f';
 }
 
