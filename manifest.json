@@ -1,0 +1,19 @@
+{
+  "name": "MyTube",
+  "short_name": "MyTube",
+  "description": "My personal YouTube app — my videos, Shorts, subscriptions and playlists.",
+  "start_url": "./#home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f0f",
+  "theme_color": "#0f0f0f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}
