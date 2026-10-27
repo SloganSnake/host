@@ -31,6 +31,8 @@ const ICONS = {
   next: 'M16 5h2v14h-2zM4 5v14l11-7z',
   bell: 'M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16zM10 21h4',
   comment: 'M4 4h16v12H9l-5 4z',
+  send: 'M4 12 20 4l-6 16-3-7zM11 13l9-9',
+  sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   feed: 'M4 7h16v13H4zM8 4h8M12 10.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14',
@@ -118,8 +120,34 @@ function avatar(name, size = 36, photo, color) {
   const inner = photo ? `<img src="${esc(photo)}" alt="">` : esc((name || '?').trim().charAt(0).toUpperCase());
   return `<span class="avatar av-${size}" style="background:${color || hashColor(name)}">${inner}</span>`;
 }
-function profileAvatar(size) { const p = state.profile; return avatar(p.name, size, p.photo, p.color); }
+// Profile styling: a font and effect for your name, and a frame around your picture.
+const FONTS = {
+  '': ['Default', 'inherit'],
+  bungee: ['Bungee', "'Bungee', sans-serif"],
+  pacifico: ['Pacifico', "'Pacifico', cursive"],
+  pixel: ['Pixel', "'Press Start 2P', monospace"],
+  marker: ['Marker', "'Permanent Marker', cursive"],
+  orbitron: ['Orbitron', "'Orbitron', sans-serif"],
+  creepster: ['Creepster', "'Creepster', cursive"],
+  lobster: ['Lobster', "'Lobster', cursive"],
+  monoton: ['Monoton', "'Monoton', cursive"],
+  glitch: ['Glitch', "'Rubik Glitch', sans-serif"],
+  bangers: ['Bangers', "'Bangers', cursive"],
+};
+const FRAMES = { none: 'None', rainbow: 'Rainbow', neon: 'Neon', fire: 'Fire', gold: 'Gold', galaxy: 'Galaxy', ice: 'Ice' };
+const NAME_FX = { plain: 'Plain', rainbow: 'Rainbow', glow: 'Neon glow', fire: 'Fire', gold: 'Gold' };
+function styledName(text, p = state.profile) {
+  const f = FONTS[p.font] ? p.font : '';
+  return `<span class="uname font-${f || 'default'} fx-${p.nameFx || 'plain'}" style="font-family:${FONTS[f][1]}">${esc(text)}</span>`;
+}
+const myName = (text) => styledName(text);
+function profileAvatar(size, p = state.profile) {
+  const a = avatar(p.name, size, p.photo, p.color);
+  const fr = FRAMES[p.frame] ? p.frame : 'none';
+  return fr === 'none' ? a : `<span class="pfp frame-${fr} ${size <= 36 ? 'sm' : ''}">${a}</span>`;
+}
 // Your uploads show your own profile picture as the channel avatar.
+const chName = (v) => v.local ? myName(v.channel) : esc(v.channel);
 function channelAvatar(v, size) { return v.local ? profileAvatar(size) : avatar(v.channel, size); }
 
 function ago(t) {
@@ -378,7 +406,7 @@ function bigCard(v, k) {
       <a href="#channel/${encodeURIComponent(v.channel)}">${channelAvatar(v, 36)}</a>
       <a class="text" data-play="${v.id}" data-ctx="${k}" href="#">
         <div class="title">${esc(v.title)}</div>
-        <div class="sub"><span>${esc(v.channel)}</span>${viewsSpan(v.id)}<span>${ago(v.addedAt)}</span></div>
+        <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${ago(v.addedAt)}</span></div>
       </a>
       <button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button>
     </div></div>`;
@@ -387,14 +415,14 @@ function smallCard(v, k, wide) {
   return `<div class="hcard ${wide ? 'wide' : ''}">
     ${thumbBox(v, k)}
     <div class="meta"><a class="text" data-play="${v.id}" data-ctx="${k}" href="#">
-      <div class="title">${esc(v.title)}</div><div class="sub"><span>${esc(v.channel)}</span>${wide ? viewsSpan(v.id) + `<span>${ago(v.addedAt)}</span>` : ''}</div></a>
+      <div class="title">${esc(v.title)}</div><div class="sub"><span>${chName(v)}</span>${wide ? viewsSpan(v.id) + `<span>${ago(v.addedAt)}</span>` : ''}</div></a>
       <button class="more" data-menu="${v.id}" aria-label="More">${icon('more')}</button></div></div>`;
 }
 function listRow(v, k, extra) {
   return `<div class="lrow">
     ${thumbBox(v, k)}
     <a class="text" data-play="${v.id}" data-ctx="${k}" href="#"><div class="title">${esc(v.title)}</div>
-      <div class="sub"><span>${esc(v.channel)}</span>${viewsSpan(v.id)}<span>${extra ?? ago(v.addedAt)}</span></div></a>
+      <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${extra ?? ago(v.addedAt)}</span></div></a>
     <button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button></div>`;
 }
 function shortTile(v, width = 150) {
@@ -494,11 +522,11 @@ function renderYou() {
   const shortsGroup = histShorts.length ? `<div class="hcard"><a class="thumb shorts-group" href="#shorts/${histShorts[0].id}">
       ${histShorts.slice(0, 3).map((v) => `<img loading="lazy" src="${thumb(v.id)}" alt="">`).join('')}<span class="badge">${icon('shorts')}</span></a>
       <div class="meta"><a class="text" href="#shorts/${histShorts[0].id}"><div class="title">Shorts</div><div class="sub">${histShorts.length} watched</div></a></div></div>` : '';
-  return `<div class="you-head">
+  return `<div class="you-head" style="--pc:${esc(p.color)}">
     <header class="topbar"><button class="pill-btn" data-action="edit-profile">${icon('user')} Profile ${icon('down')}</button><div class="spacer"></div>
       <a class="icon-btn" href="#search" aria-label="Search">${icon('search')}</a>
       <button class="icon-btn" data-action="settings" aria-label="Settings">${icon('gear')}</button></header>
-    <div class="profile">${profileAvatar(88)}<div><h1>${esc(p.name)}</h1><div class="handle">${esc(p.handle)}</div></div></div>
+    <div class="profile">${profileAvatar(88)}<div><h1>${myName(p.name)}</h1><div class="handle">${esc(p.handle)}</div></div></div>
     <div class="btn-row"><a class="btn primary" href="#channel/${encodeURIComponent(p.name)}">View channel</a><button class="btn" data-action="add">Upload video</button></div>
   </div>
   <a class="section-title" href="#history">History ${icon('right')}</a>
@@ -559,11 +587,11 @@ function renderShorts(startId) {
   <div class="shorts" id="shorts">${list.map((v) => `
     <div class="short" data-short="${v.id}">
       <div class="frame"><img src="${thumb(v.id)}" alt=""></div>
-      <div class="overlay"><div class="who">${channelAvatar(v, 28)} ${esc(v.channel)}</div><div>${esc(v.title)}</div>
+      <div class="overlay"><div class="who">${channelAvatar(v, 28)} ${chName(v)}</div><div>${esc(v.title)}</div>
         <div class="sub" style="color:#ddd">${viewsSpan(v.id)}</div></div>
       <div class="side">
         <button data-act-like="${v.id}" class="${state.liked.includes(v.id) ? 'on' : ''}">${icon('like')}<span>Like</span></button>
-        <button data-action="comments" data-id="${v.id}">${icon('comment')}<span>${(state.comments[v.id] || []).length || 'Comment'}</span></button>
+        <button data-action="comments" data-id="${v.id}">${icon('comment')}<span>${(state.comments[v.id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0) || 'Comment'}</span></button>
         <button data-act-share="${v.id}">${icon('share')}<span>Share</span></button>
         <button data-menu="${v.id}">${icon('more')}<span>More</span></button>
       </div>
@@ -622,7 +650,7 @@ function renderChannel(name) {
   const mine = vids.some((v) => v.local) || name === state.profile.name;
   const url = sub?.url || vids.find((v) => v.channelUrl)?.channelUrl;
   const totalViews = vids.reduce((n, v) => n + (viewsOf(v.id) || 0), 0);
-  const top = `<div class="profile">${mine ? profileAvatar(64) : avatar(name, 64)}<div style="flex:1;min-width:0"><h1 style="font-size:22px">${esc(name)}</h1>
+  const top = `<div class="profile">${mine ? profileAvatar(64) : avatar(name, 64)}<div style="flex:1;min-width:0"><h1 style="font-size:22px">${mine ? myName(name) : esc(name)}</h1>
       <div class="sub">${vids.length} saved videos${totalViews ? ` · ${fmtCount(totalViews)} views` : ''}</div></div></div>
     <div class="btn-row">${mine ? `<button class="btn" data-action="add" style="flex:1">${icon('upload')} Upload video</button>` :
       `<button class="sub-btn ${sub ? 'on' : ''}" data-act-sub="${esc(name)}" style="flex:1">${sub ? 'Subscribed' : 'Subscribe'}</button>`}
@@ -807,10 +835,11 @@ function setPlayerMode(mode) {
 
 function commentsCard(id) {
   const list = state.comments[id] || [];
-  const last = list[0];
+  const total = list.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
+  const top = [...list].sort((x, y) => cScore(y) - cScore(x) || y.at - x.at)[0];
   return `<button class="comments-card" data-action="comments" data-id="${id}">
-    <div class="cc-head"><b>Comments</b> <span class="sub">${list.length || ''}</span></div>
-    <div class="cc-body">${last ? `${profileAvatar(28)}<span class="cc-text">${esc(last.text)}</span>` : `${profileAvatar(28)}<span class="cc-text muted">Add a comment…</span>`}</div>
+    <div class="cc-head"><b>Comments</b> <span class="sub">${total || ''}</span></div>
+    <div class="cc-body">${profileAvatar(28)}${top ? `<span class="cc-text">${esc(top.text)}</span>` : '<span class="cc-text muted">Add a comment...</span>'}</div>
   </button>`;
 }
 
@@ -824,18 +853,19 @@ function renderPlayerBody(animate) {
   const body = $('#player-body');
   body.classList.toggle('enter', !!animate && !reduceMotion);
   body.innerHTML = `
+    <div class="ambient" style="background-image:url('${thumb(v.id)}')"></div>
     <div class="player-top"><button class="icon-btn" data-action="minimize" aria-label="Minimize">${icon('down')}</button><div class="spacer"></div>
       <button class="icon-btn" data-action="prev" aria-label="Previous" ${prevInQueue() ? '' : 'disabled'}>${icon('prev')}</button>
       <button class="icon-btn" data-action="next" aria-label="Next" ${nextInQueue() ? '' : 'disabled'}>${icon('next')}</button>
       ${v.local ? '' : `<a class="icon-btn" href="${ytUrl(v)}" target="_blank" rel="noopener" aria-label="Open on YouTube">${icon('external')}</a>`}
       <button class="icon-btn" data-action="close-player" aria-label="Close">${icon('close')}</button></div>
     <div class="watch-info"><h2>${esc(v.title)}</h2>
-      <div class="sub statline"><a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize"><b>${esc(handle)}</b></a>
+      <div class="sub statline"><a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize"><b>${v.local ? myName(handle) : esc(handle)}</b></a>
         <span data-likes-long="${v.id}">${likesLong(v.id)}</span><span data-views-long="${v.id}">${viewsLong(v.id)}</span>
         <span>${v.local ? 'uploaded' : 'added'} ${ago(v.addedAt)}</span>${v.category ? `<span>#${esc(v.category)}</span>` : ''}</div></div>
     <div class="watch-row">
       <a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize">${channelAvatar(v, 36)}</a>
-      ${v.local ? `<span class="watch-ch">${esc(v.channel)}</span>` : sub
+      ${v.local ? `<span class="watch-ch">${myName(v.channel)}</span>` : sub
         ? `<button class="pill-btn bell" data-act-sub="${esc(v.channel)}" aria-label="Subscribed — tap to unsubscribe">${icon('bell')}${icon('down')}</button>`
         : `<button class="sub-btn" data-act-sub="${esc(v.channel)}">Subscribe</button>`}
       <div class="spacer"></div>
@@ -1051,43 +1081,119 @@ function editVideoSheet(id) {
   });
 }
 
-function commentsSheet(id) {
-  const list = state.comments[id] || [];
+// YouTube-style comments: Top/Newest, likes, replies in threads, Read more.
+// They're your own notes, so they're private and stored on this phone.
+const cview = { sort: 'top', replyTo: null, open: new Set(), more: new Set(), menu: null };
+const cScore = (c) => (c.liked ? 2 : 0) - (c.disliked ? 1 : 0) + (c.replies?.length || 0);
+function findComment(id, cid) {
+  for (const c of state.comments[id] || []) {
+    if (c.id === cid) return { c, list: state.comments[id] };
+    const r = (c.replies || []).find((x) => x.id === cid);
+    if (r) return { c: r, list: c.replies, parent: c };
+  }
+  return null;
+}
+function commentItem(c, reply) {
   const p = state.profile;
-  openSheet(`<h3>Comments <span class="sub" style="font-weight:400">${list.length}</span></h3>
-    <div class="comment-new">${profileAvatar(36)}<input type="text" id="cm-text" placeholder="Add a comment…" maxlength="2000" enterkeyhint="send"><button class="btn red" data-x="post">Post</button></div>
-    <div class="comment-list">${list.map((c) => `
-      <div class="comment">${profileAvatar(36)}<div class="cbody"><div class="sub">${esc(p.handle)} · ${ago(c.at)}</div><div class="ctext">${esc(c.text)}</div></div>
-        <button class="icon-btn" data-del="${c.id}" aria-label="Delete comment">${icon('trash')}</button></div>`).join('') ||
-      '<div class="hint">No comments yet. Your comments are private and saved on this phone.</div>'}</div>`, (s) => {
-    const inp = $('#cm-text', s);
+  const long = c.text.length > 180 || c.text.split('\n').length > 4;
+  const expanded = cview.more.has(c.id);
+  const n = c.replies?.length || 0, open = cview.open.has(c.id);
+  return `<div class="cm ${reply ? 'reply' : ''} ${!reply && n && !open ? 'has-replies' : ''}">
+    ${profileAvatar(reply ? 28 : 36)}
+    <div class="cm-main">
+      <div class="cm-meta">${myName(p.handle)} <span>• ${ago(c.at)}</span></div>
+      <div class="cm-text ${long && !expanded ? 'clamp' : ''}">${esc(c.text)}</div>
+      ${long ? `<button class="cm-more" data-cmore="${c.id}">${expanded ? 'Show less' : 'Read more'}</button>` : ''}
+      <div class="cm-actions">
+        <button class="${c.liked ? 'on' : ''}" data-clike="${c.id}" aria-label="Like">${icon('like')}<span>${c.liked ? 1 : ''}</span></button>
+        <button class="${c.disliked ? 'on' : ''}" data-cdis="${c.id}" aria-label="Dislike">${icon('dislike')}</button>
+        <button data-creply="${c.id}" aria-label="Reply">${icon('comment')}</button>
+      </div>
+      ${!reply && n ? `<button class="cm-replies" data-copen="${c.id}">${n} repl${n === 1 ? 'y' : 'ies'} ${icon(open ? 'down' : 'right')}</button>
+        ${open ? `<div class="cm-thread">${c.replies.map((r) => commentItem(r, true)).join('')}</div>` : ''}` : ''}
+    </div>
+    ${cview.menu === c.id ? `<button class="cm-del" data-cdel="${c.id}">Delete</button>` : `<button class="more" data-cmenu="${c.id}" aria-label="Comment options">${icon('moreV')}</button>`}
+  </div>`;
+}
+function commentsSheet(id) {
+  cview.replyTo = null; cview.menu = null;
+  openSheet(`<div class="cm-sheet">
+    <div class="cm-head"><h3>Comments <span class="cm-count"></span></h3><button class="icon-btn" data-x="close" aria-label="Close">${icon('close')}</button></div>
+    <div class="cm-chips"><button class="chip" data-sort="top">Top</button><button class="chip" data-sort="newest">Newest</button></div>
+    <div class="cm-note">Your comments are private and saved only on this phone.</div>
+    <div class="cm-list"></div>
+    <div class="cm-bar">
+      <div class="cm-replying hidden"><span></span><button data-x="cancel-reply" aria-label="Cancel reply">${icon('close')}</button></div>
+      <div class="cm-input">${profileAvatar(32)}<input type="text" id="cm-text" placeholder="Comment..." maxlength="2000" enterkeyhint="send" autocomplete="off">
+        <button class="cm-send" data-x="post" aria-label="Post">${icon('send')}</button></div>
+    </div></div>`, (s) => {
+    s.classList.add('tall');
+    const inp = $('#cm-text', s), listEl = $('.cm-list', s);
+    const draw = () => {
+      const list = state.comments[id] || [];
+      const total = list.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
+      $('.cm-count', s).textContent = total || '';
+      s.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('active', b.dataset.sort === cview.sort));
+      const sorted = [...list].sort(cview.sort === 'top' ? (x, y) => cScore(y) - cScore(x) || y.at - x.at : (x, y) => y.at - x.at);
+      listEl.innerHTML = sorted.map((c) => commentItem(c, false)).join('') ||
+        `<div class="empty">${icon('comment')}<div>No comments yet.<br>Start the conversation.</div></div>`;
+      const rep = cview.replyTo && findComment(id, cview.replyTo);
+      $('.cm-replying', s).classList.toggle('hidden', !rep);
+      if (rep) $('.cm-replying span', s).innerHTML = `Replying to ${myName(state.profile.handle)}`;
+      inp.placeholder = rep ? 'Add a reply...' : 'Comment...';
+      afterCommentChange(id);
+    };
     const post = () => {
       const text = inp.value.trim();
       if (!text) return;
-      (state.comments[id] ||= []).unshift({ id: Date.now().toString(36), text, at: Date.now() });
-      save();
-      commentsSheet(id);
-      afterCommentChange(id);
+      const c = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text, at: Date.now() };
+      const rep = cview.replyTo && findComment(id, cview.replyTo);
+      if (rep) {
+        const top = rep.parent || rep.c;
+        (top.replies ||= []).push(c);
+        cview.open.add(top.id);
+      } else (state.comments[id] ||= []).unshift({ ...c, replies: [] });
+      cview.replyTo = null;
+      inp.value = '';
+      save(); draw();
+      if (!rep) listEl.scrollTop = 0;
     };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') post(); });
     s.addEventListener('click', (e) => {
-      if (e.target.closest('[data-x="post"]')) post();
-      const del = e.target.closest('[data-del]');
-      if (del) {
-        state.comments[id] = list.filter((c) => c.id !== del.dataset.del);
+      const t = e.target.closest('button');
+      if (!t) return;
+      const d = t.dataset;
+      if (d.x === 'close') return closeSheet();
+      if (d.x === 'post') return post();
+      if (d.x === 'cancel-reply') cview.replyTo = null;
+      if (d.sort) cview.sort = d.sort;
+      if (d.cmore) cview.more.has(d.cmore) ? cview.more.delete(d.cmore) : cview.more.add(d.cmore);
+      if (d.copen) cview.open.has(d.copen) ? cview.open.delete(d.copen) : cview.open.add(d.copen);
+      if (d.creply) { cview.replyTo = d.creply; setTimeout(() => inp.focus(), 0); }
+      if (d.clike || d.cdis) {
+        const f = findComment(id, d.clike || d.cdis);
+        if (d.clike) { f.c.liked = !f.c.liked; if (f.c.liked) f.c.disliked = false; } else { f.c.disliked = !f.c.disliked; if (f.c.disliked) f.c.liked = false; }
         save();
-        commentsSheet(id);
-        afterCommentChange(id);
       }
+      cview.menu = d.cmenu ? (cview.menu === d.cmenu ? null : d.cmenu) : null;
+      if (d.cdel) {
+        const f = findComment(id, d.cdel);
+        f.list.splice(f.list.indexOf(f.c), 1);
+        save(); toast('Comment deleted');
+      }
+      draw();
+      if (d.clike || d.cdis) pop(s.querySelector(`[data-${d.clike ? 'clike' : 'cdis'}="${d.clike || d.cdis}"]`));
     });
+    draw();
   });
 }
 function afterCommentChange(id) {
-  if (current === id && playerMode === 'full') {
+  const total = (state.comments[id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
+  if (current === id) {
     const card = $('#player-body .comments-card');
     if (card) card.outerHTML = commentsCard(id);
   }
-  document.querySelectorAll(`.short[data-short="${id}"] [data-action="comments"] span`).forEach((el) => { el.textContent = (state.comments[id] || []).length || 'Comment'; });
+  document.querySelectorAll(`.short[data-short="${id}"] [data-action="comments"] span`).forEach((el) => { el.textContent = total || 'Comment'; });
 }
 
 function playlistSheet(id) {
@@ -1166,17 +1272,30 @@ function manageSubsSheet() {
 const SWATCHES = ['#5b3cc4', '#c4302b', '#0f9d58', '#1a73e8', '#f4b400', '#e91e63', '#00897b', '#424242'];
 function editProfileSheet() {
   const p = state.profile;
-  let photo = p.photo, color = p.color;
+  const d = { photo: p.photo, color: p.color, font: p.font || '', nameFx: p.nameFx || 'plain', frame: p.frame || 'none' };
+  const picker = (key, options, render) => `<div class="style-picker">${Object.entries(options).map(([k, label]) =>
+    `<button class="style-opt ${d[key] === k ? 'on' : ''}" data-k="${key}" data-v="${k}">${render(k, label)}</button>`).join('')}</div>`;
   openSheet(`<h3>Edit profile</h3>
-    <div class="field" style="display:flex;align-items:center;gap:16px"><span id="ep-av">${avatar(p.name, 64, photo, color)}</span>
-      <div style="display:flex;flex-direction:column;gap:8px"><label class="pill-btn" style="margin:0;color:var(--fg)">${icon('upload')} Upload photo<input type="file" id="ep-file" accept="image/*" hidden></label>
-      <button class="pill-btn" data-x="nophoto">Remove photo</button></div></div>
+    <div class="ep-preview" id="ep-preview"></div>
+    <div class="field" style="display:flex;gap:8px;flex-wrap:wrap"><label class="pill-btn" style="margin:0;color:var(--fg)">${icon('upload')} Upload photo<input type="file" id="ep-file" accept="image/*" hidden></label>
+      <button class="pill-btn" data-x="nophoto">Remove photo</button></div>
     <div class="field"><label>Name</label><input type="text" id="ep-name" value="${esc(p.name)}"></div>
     <div class="field"><label>Handle</label><input type="text" id="ep-handle" value="${esc(p.handle)}"></div>
-    <div class="field"><label>Color</label><div class="swatches">${SWATCHES.map((c) => `<button class="swatch ${c === color ? 'on' : ''}" style="background:${c}" data-color="${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>
+    <div class="field"><label>Picture frame</label>${picker('frame', FRAMES, (k, label) =>
+      `${profileAvatar(36, { ...p, ...d, frame: k })}<span>${label}</span>`)}</div>
+    <div class="field"><label>Name font</label>${picker('font', Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v[0]])), (k, label) =>
+      `<span class="font-${k || 'default'}" style="font-family:${FONTS[k][1]};font-size:17px">Aa</span><span>${label}</span>`)}</div>
+    <div class="field"><label>Name effect</label>${picker('nameFx', NAME_FX, (k, label) =>
+      `<span class="uname fx-${k}" style="font-weight:700;font-size:17px">Aa</span><span>${label}</span>`)}</div>
+    <div class="field"><label>Color</label><div class="swatches">${SWATCHES.map((c) => `<button class="swatch ${c === d.color ? 'on' : ''}" style="background:${c}" data-color="${c}" aria-label="Color ${c}"></button>`).join('')}</div></div>
     <div class="row"><button class="btn" data-x="cancel">Cancel</button><button class="btn red" data-x="go">Save</button></div>`, (s) => {
-    const refresh = () => { $('#ep-av', s).innerHTML = avatar($('#ep-name', s).value || p.name, 64, photo, color); };
+    const draft = () => ({ ...p, ...d, name: $('#ep-name', s).value || p.name, handle: $('#ep-handle', s).value || p.handle });
+    const refresh = () => {
+      const q = draft();
+      $('#ep-preview', s).innerHTML = `${profileAvatar(88, q)}<div><div class="ep-name">${styledName(q.name, q)}</div><div class="handle">${esc(q.handle)}</div></div>`;
+    };
     $('#ep-name', s).addEventListener('input', refresh);
+    $('#ep-handle', s).addEventListener('input', refresh);
     $('#ep-file', s).addEventListener('change', (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1185,17 +1304,23 @@ function editProfileSheet() {
         const c = document.createElement('canvas'), n = 256, m = Math.min(img.width, img.height);
         c.width = c.height = n;
         c.getContext('2d').drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, n, n);
-        photo = c.toDataURL('image/jpeg', 0.85);
+        d.photo = c.toDataURL('image/jpeg', 0.85);
         URL.revokeObjectURL(img.src);
         refresh();
       };
       img.src = URL.createObjectURL(f);
     });
     s.addEventListener('click', (e) => {
-      const sw = e.target.closest('[data-color]');
-      if (sw) { color = sw.dataset.color; s.querySelectorAll('.swatch').forEach((x) => x.classList.toggle('on', x === sw)); refresh(); return; }
+      const opt = e.target.closest('.style-opt, [data-color]');
+      if (opt) {
+        if (opt.dataset.color) d.color = opt.dataset.color; else d[opt.dataset.k] = opt.dataset.v;
+        opt.parentElement.querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
+        opt.classList.add('on');
+        refresh();
+        return;
+      }
       const x = e.target.closest('[data-x]')?.dataset.x;
-      if (x === 'nophoto') { photo = null; refresh(); }
+      if (x === 'nophoto') { d.photo = null; refresh(); }
       if (x === 'cancel') closeSheet();
       if (x === 'go') {
         let handle = $('#ep-handle', s).value.trim();
@@ -1203,10 +1328,13 @@ function editProfileSheet() {
         const oldName = p.name, name = $('#ep-name', s).value.trim() || 'You';
         // Your uploads follow your channel name.
         if (name !== oldName) Object.values(state.videos).forEach((v) => { if (v.local && v.channel === oldName) v.channel = name; });
-        Object.assign(state.profile, { name, handle: handle || '@me', photo, color });
+        Object.assign(state.profile, d, { name, handle: handle || '@me' });
         save(); closeSheet(); rerender();
+        if (current) renderPlayerBody();
+        toast('Profile updated');
       }
     });
+    refresh();
   });
 }
 
