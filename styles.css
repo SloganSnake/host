@@ -845,3 +845,9 @@ input.switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px
   .mono-chip:active, .mono-import:active, .mono-cancel:active { transform: scale(.96); }
 }
 @keyframes hop { 50% { transform: translateY(-6px); } }
+
+/* ---------- Update banner ---------- */
+#update-bar { position: fixed; left: 50%; top: calc(var(--safe-t) + 10px); transform: translateX(-50%); z-index: 110; display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 18px; border-radius: 999px; font-weight: 600; font-size: 14.5px; color: #fff; white-space: nowrap;
+  background: var(--accent-grad); box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 45%, transparent); animation: toastIn .5s cubic-bezier(.3,1.5,.5,1); }
+#update-bar svg { width: 18px; height: 18px; }

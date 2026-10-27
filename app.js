@@ -1989,6 +1989,27 @@ refreshSeeds().then(() => { if (!$('#sheet-root').innerHTML && !location.hash.st
   }
 }
 
+// Update check: version.json is published with every release. When it no longer
+// matches this build, offer a one-tap refresh instead of waiting for caches to expire.
+const APP_VERSION = '13';
+async function checkForUpdate() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION && !$('#update-bar')) {
+      document.body.insertAdjacentHTML('beforeend', `<button id="update-bar">${icon('download')} New version available · Tap to update</button>`);
+      $('#update-bar').addEventListener('click', async () => {
+        $('#update-bar').textContent = 'Updating…';
+        try { await (await navigator.serviceWorker?.getRegistration())?.update(); } catch { /* reload anyway */ }
+        location.reload();
+      });
+    }
+  } catch { /* offline */ }
+}
+checkForUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
