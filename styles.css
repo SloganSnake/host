@@ -801,3 +801,51 @@ input.switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px
 @keyframes subPop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes bellRing { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); } 45% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); } }
 .sheet label.opt, .sheet label.check { color: var(--fg); font-size: inherit; margin-bottom: 0; }
+
+/* ---------- Settings sheet, polished ---------- */
+.sheet.settings { background: linear-gradient(180deg, #202125 0%, #17181b 40%, #121315 100%); box-shadow: 0 -10px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); }
+.sheet.settings h3 { font-size: 24px; margin: 6px 22px 16px; letter-spacing: -.2px; }
+.sheet.settings .set-group { margin: 6px 16px 14px; border-radius: 22px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,.065), rgba(255,255,255,.025));
+  border: 1px solid rgba(255,255,255,.08); box-shadow: 0 10px 28px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); }
+.sheet.settings .set-group .check, .sheet.settings .set-group .opt { gap: 22px; padding: 19px 20px; font-size: 17px; color: #ececee; }
+.sheet.settings .set-group > * + * { border-top: 1px solid rgba(255,255,255,.07); }
+.sheet.settings .set-group.inset > * + * { border-top: 0; position: relative; }
+.sheet.settings .set-group.inset > * + *::before { content: ""; position: absolute; left: 66px; right: 20px; top: 0; border-top: 1px solid rgba(255,255,255,.08); }
+.sheet.settings .set-group svg { width: 26px; height: 26px; color: #9c9da3; }
+.sheet.settings .set-group svg path { stroke-width: 1.4; }
+.sheet.settings .opt.danger { color: #c9605a; }
+.sheet.settings .opt.danger svg { color: #c9605a; }
+.sheet.settings .set-label { margin: 18px 22px 10px; font-size: 14px; letter-spacing: .09em; color: #9c9da3; }
+.sheet.settings .set-label span { font-size: 13.5px; color: #8b8c92; }
+.sheet.settings .hint { padding: 4px 22px 10px; font-size: 13.5px; color: #8b8c92; line-height: 1.5; }
+
+/* Glowing switches */
+.sheet.settings input.switch { width: 56px; height: 32px; background: #3a3b40; box-shadow: inset 0 1px 3px rgba(0,0,0,.5); }
+.sheet.settings input.switch::after { top: 3px; left: 3px; width: 26px; height: 26px; box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+.sheet.settings input.switch:checked { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 78%, #000), color-mix(in srgb, var(--accent) 55%, #000));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 1px 0 rgba(255,255,255,.15); }
+.sheet.settings input.switch:checked::after { transform: translateX(24px); }
+
+/* Effect chips with gradient-border glow */
+.sheet.settings .fx-picker { gap: 12px; padding: 4px 22px 10px; }
+.sheet.settings .fx-chip { display: inline-flex; align-items: center; gap: 8px; height: 54px; padding: 0 22px; border-radius: 999px; font-size: 17px; font-weight: 600; color: #f2f2f4;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.sheet.settings .fx-chip.on { border: 2px solid transparent; padding: 0 21px; }
+.sheet.settings .warm .fx-chip.on { background: linear-gradient(180deg, #2a1d1f, #1d1718) padding-box, linear-gradient(90deg, #ff2a55, #ff9a3c) border-box;
+  box-shadow: 0 0 18px rgba(255,80,60,.45), 0 0 4px rgba(255,140,60,.6); }
+.sheet.settings .cool .fx-chip.on { background: linear-gradient(180deg, #211f33, #18172a) padding-box, linear-gradient(90deg, #8a5cff, #4f8bff) border-box;
+  box-shadow: 0 0 18px rgba(120,90,255,.5), 0 0 4px rgba(100,140,255,.6); }
+
+/* Light theme version */
+:root[data-theme="light"] .sheet.settings { background: linear-gradient(180deg, #ffffff, #f4f4f6); }
+:root[data-theme="light"] .sheet.settings .set-group { background: #fff; border-color: rgba(0,0,0,.08); box-shadow: 0 8px 22px rgba(0,0,0,.08); }
+:root[data-theme="light"] .sheet.settings .set-group .check, :root[data-theme="light"] .sheet.settings .set-group .opt { color: #1a1a1c; }
+:root[data-theme="light"] .sheet.settings .set-group > * + *, :root[data-theme="light"] .sheet.settings .set-group.inset > * + *::before { border-color: rgba(0,0,0,.08); }
+:root[data-theme="light"] .sheet.settings input.switch { background: #d6d6da; }
+:root[data-theme="light"] .sheet.settings .fx-chip { color: #1a1a1c; background: #fff; border-color: rgba(0,0,0,.1); box-shadow: 0 3px 10px rgba(0,0,0,.08); }
+:root[data-theme="light"] .sheet.settings .warm .fx-chip.on { background: linear-gradient(#fff, #fff) padding-box, linear-gradient(90deg, #ff2a55, #ff9a3c) border-box; }
+:root[data-theme="light"] .sheet.settings .cool .fx-chip.on { background: linear-gradient(#fff, #fff) padding-box, linear-gradient(90deg, #8a5cff, #4f8bff) border-box; }
+
+/* Effect rings glow */
+.fx-ring { box-shadow: 0 0 12px currentColor, inset 0 0 8px currentColor; }

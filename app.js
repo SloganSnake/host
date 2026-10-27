@@ -41,6 +41,7 @@ const ICONS = {
   shuffle: 'M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
   cast: 'M3 8V5h18v14h-7M3 12a8 8 0 0 1 8 8M3 16a4 4 0 0 1 4 4M3 20h.01',
   zap: 'M13 2 4 14h7l-1 8 9-12h-7z',
+  playline: 'M7 4.5v15l12-7.5z',
   sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   feed: 'M4 7h16v13H4zM8 4h8M12 10.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
@@ -290,6 +291,7 @@ function ringAt(x, y, color, size = 70) {
   const el = particle(x, y, '', 'fx-ring');
   el.style.width = el.style.height = size + 'px';
   el.style.borderColor = color;
+  el.style.color = color;
   el.animate([{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 0.9 }, { transform: 'translate(-50%,-50%) scale(1.6)', opacity: 0 }],
     { duration: 600, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => el.remove();
 }
@@ -1722,20 +1724,21 @@ function settingsSheet() {
   openSheet(`<h3>Settings</h3>
     <div class="set-group">
       <label class="check">${icon('moon')}<span style="flex:1">Dark theme</span><input class="switch" type="checkbox" id="st-dark" ${st.theme === 'dark' ? 'checked' : ''}></label>
-      <label class="check">${icon('play')}<span style="flex:1">Autoplay next video</span><input class="switch" type="checkbox" id="st-auto" ${st.autoplay ? 'checked' : ''}></label>
+      <label class="check">${icon('playline')}<span style="flex:1">Autoplay next video</span><input class="switch" type="checkbox" id="st-auto" ${st.autoplay ? 'checked' : ''}></label>
       <label class="check">${icon('zap')}<span style="flex:1">Comic style</span><input class="switch" type="checkbox" id="st-comic" ${st.comic ? 'checked' : ''}></label>
     </div>
     <div class="set-label">Like effect <span>tap to preview</span></div>
-    <div class="fx-picker">${Object.entries(LIKE_FX).map(([k, l]) => `<button class="fx-chip ${(st.likeFx || 'pop') === k ? 'on' : ''}" data-likefx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
+    <div class="fx-picker warm">${Object.entries(LIKE_FX).map(([k, l]) => `<button class="fx-chip ${(st.likeFx || 'pop') === k ? 'on' : ''}" data-likefx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
     <div class="set-label">Subscribe effect</div>
-    <div class="fx-picker">${Object.entries(SUB_FX).map(([k, l]) => `<button class="fx-chip ${(st.subFx || 'confetti') === k ? 'on' : ''}" data-subfx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
-    <div class="set-group">
+    <div class="fx-picker cool">${Object.entries(SUB_FX).map(([k, l]) => `<button class="fx-chip ${(st.subFx || 'confetti') === k ? 'on' : ''}" data-subfx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
+    <div class="set-group inset">
     <button class="opt" data-x="export">${icon('download')} Back up my library</button>
     <label class="opt" style="cursor:pointer">${icon('upload')} Restore from backup<input type="file" id="st-import" accept="application/json,.json" hidden></label>
     <button class="opt" data-x="clear">${icon('history')} Clear watch history</button>
-    <button class="opt" data-x="reset" style="color:#ff4e45">${icon('trash')} Reset everything</button>
+    <button class="opt danger" data-x="reset">${icon('trash')} Reset everything</button>
     </div>
     <div class="hint">Your library is stored only on this device. The backup holds your library, playlists and profile, but not uploaded video files.</div>`, (s) => {
+    s.classList.add('settings');
     $('#st-dark', s).addEventListener('change', (e) => { st.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); save(); });
     $('#st-auto', s).addEventListener('change', (e) => { st.autoplay = e.target.checked; save(); if (current) renderPlayerBody(); });
     $('#st-comic', s).addEventListener('change', (e) => { st.comic = e.target.checked; save(); applyTheme(); rerender(); });
