@@ -32,6 +32,12 @@ const ICONS = {
   bell: 'M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16zM10 21h4',
   comment: 'M4 4h16v12H9l-5 4z',
   send: 'M4 12 20 4l-6 16-3-7zM11 13l9-9',
+  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z',
+  people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M17 11a2.5 2.5 0 1 0 0-5M18 14.5a5 5 0 0 1 3.5 5.5',
+  lock: 'M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  link: 'M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
+  imgplus: 'M14 4H4v16h16v-9M4 16l5-5 4 4 2-2 5 5M9 9.5a1.5 1.5 0 1 0 0-.01M18 2v6M15 5h6',
+  hash: 'M5 9h15M4 15h15M10 3 8 21M16 3l-2 18',
   sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   feed: 'M4 7h16v13H4zM8 4h8M12 10.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
@@ -103,11 +109,30 @@ function save(now) {
 // ---------------------------------------------------------------- helpers
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function baseThumb(v) { return v.local ? v.thumb || NO_THUMB : `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`; }
 function thumb(id) {
   const v = state.videos[id];
-  if (v?.local) return v.thumb || NO_THUMB;
-  return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  if (!v) return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  return v.customThumb || baseThumb(v);
 }
+// Visibility works like YouTube's, inside your own app:
+// public shows in feeds, unlisted only in your library and channel, private is locked.
+const VISIBILITY = {
+  public: ['globe', 'Public', 'Shows up in your Home, Subscriptions and Shorts feeds'],
+  unlisted: ['link', 'Unlisted', 'Kept out of your feeds, but still in your library and channel'],
+  private: ['lock', 'Private', 'Hidden from feeds and marked with a lock'],
+};
+const visOf = (v) => VISIBILITY[v.visibility] ? v.visibility : 'public';
+const inFeeds = (v) => visOf(v) === 'public';
+function parseTags(text) {
+  const out = [];
+  for (const raw of String(text).split(/[\s,]+/)) {
+    const t = raw.replace(/^#+/, '').replace(/[^\p{L}\p{N}_]/gu, '');
+    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.slice(0, 15);
+}
+const tagLinks = (tags) => tags.map((t) => `<a href="#search/${encodeURIComponent('#' + t)}" data-action="minimize">#${esc(t)}</a>`).join(' ');
 const ytUrl = (v) => v.short ? `https://www.youtube.com/shorts/${v.id}` : `https://www.youtube.com/watch?v=${v.id}`;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -393,7 +418,14 @@ function progressBar(id) {
   return `<div class="watched" style="width:${Math.min(100, (p.t / p.d) * 100).toFixed(1)}%"></div>`;
 }
 function durBadge(id) { const p = state.progress[id]; return p && p.d ? `<span class="badge">${fmtTime(p.d)}</span>` : ''; }
-const localBadge = (v) => v.local ? `<span class="badge left">${icon('phone')} On phone</span>` : '';
+function localBadge(v) {
+  const vis = visOf(v);
+  const parts = [v.local && icon('phone'), vis !== 'public' && icon(VISIBILITY[vis][0]), v.kids && 'Kids'].filter(Boolean);
+  if (!parts.length) return '';
+  // A single "On phone" gets a label; combinations stay compact so they never hit the duration.
+  const label = parts.length === 1 && v.local ? `${parts[0]} On phone` : parts.join(' ');
+  return `<span class="badge left" title="${[v.local && 'On phone', vis !== 'public' && VISIBILITY[vis][1], v.kids && 'Made for kids'].filter(Boolean).join(', ')}">${label}</span>`;
+}
 function thumbBox(v, k) {
   return `<a class="thumb" data-play="${v.id}" data-ctx="${k}" href="#"><img loading="lazy" src="${thumb(v.id)}" alt="">${localBadge(v)}${durBadge(v.id)}${progressBar(v.id)}</a>`;
 }
@@ -453,7 +485,7 @@ function renderHome() {
   const chips = ['Your custom feed', 'All', 'New to you', ...(hasLocal ? ['Your uploads'] : []), ...cats];
   if (!chips.includes(view.homeChip)) view.homeChip = 'All';
   const c = view.homeChip;
-  let list = vids.filter((v) => !v.short);
+  let list = vids.filter((v) => !v.short && inFeeds(v));
   if (c === 'Your custom feed') {
     const likedCh = new Set(state.liked.map((id) => state.videos[id]?.channel));
     list = list.filter((v) => isSub(v.channel) || likedCh.has(v.channel));
@@ -462,7 +494,7 @@ function renderHome() {
   else if (c !== 'All') list = list.filter((v) => v.category === c);
   if (view.shuffle) list = list.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
   const k = ctx(list.map((v) => v.id));
-  const shorts = vids.filter((v) => v.short);
+  const shorts = vids.filter((v) => v.short && inFeeds(v));
 
   let feed = '';
   list.forEach((v, i) => {
@@ -482,7 +514,7 @@ function renderHome() {
 
 function renderSubs() {
   const subs = state.subs;
-  const vids = allVideos().filter((v) => isSub(v.channel));
+  const vids = allVideos().filter((v) => isSub(v.channel) && inFeeds(v));
   let list = view.subsChannel ? vids.filter((v) => v.channel === view.subsChannel) : vids;
   const c = view.subsChip;
   if (c === 'Today') list = list.filter((v) => Date.now() - v.addedAt < 864e5);
@@ -575,7 +607,7 @@ function renderPlaylists() {
 }
 
 function renderShorts(startId) {
-  let list = allVideos().filter((v) => v.short);
+  let list = allVideos().filter((v) => v.short && (inFeeds(v) || v.id === startId));
   if (startId) {
     const i = list.findIndex((v) => v.id === startId);
     if (i > 0) list = [...list.slice(i), ...list.slice(0, i)];
@@ -591,7 +623,7 @@ function renderShorts(startId) {
         <div class="sub" style="color:#ddd">${viewsSpan(v.id)}</div></div>
       <div class="side">
         <button data-act-like="${v.id}" class="${state.liked.includes(v.id) ? 'on' : ''}">${icon('like')}<span>Like</span></button>
-        <button data-action="comments" data-id="${v.id}">${icon('comment')}<span>${(state.comments[v.id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0) || 'Comment'}</span></button>
+        <button data-action="comments" data-id="${v.id}" ${v.kids ? 'disabled' : ''}>${icon('comment')}<span>${(state.comments[v.id] || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0) || 'Comment'}</span></button>
         <button data-act-share="${v.id}">${icon('share')}<span>Share</span></button>
         <button data-menu="${v.id}">${icon('more')}<span>More</span></button>
       </div>
@@ -634,7 +666,7 @@ function setupShorts() {
 function renderSearch(q) {
   const ql = q.toLowerCase();
   const links = findLinks(q);
-  const res = q ? allVideos().filter((v) => (v.title + ' ' + v.channel + ' ' + (v.category || '')).toLowerCase().includes(ql)) : [];
+  const res = q ? allVideos().filter((v) => [v.title, v.channel, v.category, v.description, ...(v.tags || []).map((t) => '#' + t)].join(' ').toLowerCase().includes(ql)) : [];
   const k = ctx(res.map((v) => v.id));
   return `<div class="searchbar"><button class="icon-btn" data-action="back" aria-label="Back">${icon('back')}</button>
     <input id="search-input" type="search" placeholder="Search your library or paste a link" value="${esc(q)}" autocomplete="off" enterkeyhint="search"></div>
@@ -687,11 +719,13 @@ function route(animate) {
       break;
     }
     case 'channel': html = renderChannel(arg); break;
+    case 'edit': html = renderEdit(arg); break;
     default: html = renderHome();
   }
+  if (page !== 'edit') editDraft = null;
   main.classList.toggle('enter', !!animate && !reduceMotion);
   main.innerHTML = html;
-  const tab = { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
+  const tab = { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   $('#tab-avatar').innerHTML = profileAvatar(28);
   document.body.classList.toggle('on-shorts', page === 'shorts');
@@ -797,7 +831,7 @@ async function openVideo(id, q) {
   if (!v) return;
   if (current && current !== id) recordProgress(true);
   current = id;
-  queue = q && q.length ? q : allVideos().filter((x) => !x.short).map((x) => x.id);
+  queue = q && q.length ? q : allVideos().filter((x) => !x.short && inFeeds(x)).map((x) => x.id);
   if (!queue.includes(id)) queue = [id, ...queue];
   const p = state.progress[id];
   const start = p && p.d && p.t > 10 && p.t < p.d - 15 ? p.t : 0;
@@ -843,6 +877,17 @@ function commentsCard(id) {
   </button>`;
 }
 
+function descBox(v) {
+  const extra = [v.category && `<span>${esc(v.category)}</span>`, v.kids && '<span>Made for kids</span>'].filter(Boolean).join('');
+  if (!v.description && !v.tags?.length && !extra) return '';
+  return `<button class="desc-box" data-action="desc-toggle">
+    <div class="desc-stats"><b data-views-long="${v.id}">${viewsLong(v.id)}</b> <b>${ago(v.addedAt)}</b> ${v.tags?.length ? `<span class="tags">${tagLinks(v.tags)}</span>` : ''}</div>
+    ${v.description ? `<div class="desc-text">${esc(v.description)}</div>` : ''}
+    ${extra ? `<div class="desc-extra">${extra}</div>` : ''}
+    <span class="desc-more">...more</span>
+  </button>`;
+}
+
 function renderPlayerBody(animate) {
   const v = state.videos[current];
   if (!v) return;
@@ -858,11 +903,12 @@ function renderPlayerBody(animate) {
       <button class="icon-btn" data-action="prev" aria-label="Previous" ${prevInQueue() ? '' : 'disabled'}>${icon('prev')}</button>
       <button class="icon-btn" data-action="next" aria-label="Next" ${nextInQueue() ? '' : 'disabled'}>${icon('next')}</button>
       ${v.local ? '' : `<a class="icon-btn" href="${ytUrl(v)}" target="_blank" rel="noopener" aria-label="Open on YouTube">${icon('external')}</a>`}
+      <button class="icon-btn" data-action="edit-current" aria-label="Edit video">${icon('edit')}</button>
       <button class="icon-btn" data-action="close-player" aria-label="Close">${icon('close')}</button></div>
-    <div class="watch-info"><h2>${esc(v.title)}</h2>
+    <div class="watch-info">${v.tags?.length ? `<div class="tagline">${tagLinks(v.tags.slice(0, 3))}</div>` : ''}<h2>${esc(v.title)}</h2>
       <div class="sub statline"><a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize"><b>${v.local ? myName(handle) : esc(handle)}</b></a>
         <span data-likes-long="${v.id}">${likesLong(v.id)}</span><span data-views-long="${v.id}">${viewsLong(v.id)}</span>
-        <span>${v.local ? 'uploaded' : 'added'} ${ago(v.addedAt)}</span>${v.category ? `<span>#${esc(v.category)}</span>` : ''}</div></div>
+        <span>${v.local ? 'uploaded' : 'added'} ${ago(v.addedAt)}</span>${visOf(v) !== 'public' ? `<span class="vis-pill">${icon(VISIBILITY[visOf(v)][0])} ${VISIBILITY[visOf(v)][1]}</span>` : ''}</div></div>
     <div class="watch-row">
       <a href="#channel/${encodeURIComponent(v.channel)}" data-action="minimize">${channelAvatar(v, 36)}</a>
       ${v.local ? `<span class="watch-ch">${myName(v.channel)}</span>` : sub
@@ -875,7 +921,8 @@ function renderPlayerBody(animate) {
       <button class="icon-btn ${later ? 'on' : ''}" data-act-later="${v.id}" aria-label="Watch later">${icon('clock')}</button>
       <button class="icon-btn" data-menu="${v.id}" aria-label="More">${icon('more')}</button>
     </div>
-    ${commentsCard(v.id)}
+    ${descBox(v)}
+    ${v.kids ? `<div class="comments-card off"><div class="cc-head"><b>Comments are turned off</b></div><div class="sub">This video is made for kids, so comments are off.</div></div>` : commentsCard(v.id)}
     <div class="section-title" style="font-size:16px">Up next ${state.settings.autoplay ? '<span class="sub" style="margin:0 0 0 6px;font-weight:400">· autoplay on</span>' : ''}</div>
     <div class="feed">${upNext.map((x) => bigCard(x, k)).join('')}</div>
     ${upNext.length ? '' : '<div class="sub" style="padding:0 16px">Add more videos to build a queue.</div>'}`;
@@ -934,7 +981,7 @@ function videoMenu(id) {
       else if (a === 'playlist') playlistSheet(id);
       else if (a === 'comments') commentsSheet(id);
       else if (a === 'share') share(id);
-      else if (a === 'edit') editVideoSheet(id);
+      else if (a === 'edit') { if (playerMode === 'full') setPlayerMode('mini'); location.hash = '#edit/' + id; }
       else if (a === 'unplaylist') { const pl = state.playlists.find((p) => p.id === plId); pl.items = pl.items.filter((x) => x !== id); save(); rerender(); }
       else if (a === 'remove') confirmSheet(v.local ? `Delete “${v.title}” from this phone?` : `Remove “${v.title}” from your library?`, v.local ? 'Delete' : 'Remove', () => removeVideo(id));
     });
@@ -1058,28 +1105,111 @@ async function refreshSeeds() {
   save();
 }
 
-function editVideoSheet(id) {
+// ---------------------------------------------------------------- edit video page
+let editDraft = null;
+function editFields(v) {
+  return { title: v.title, description: v.description || '', tags: (v.tags || []).join(' '), visibility: visOf(v), kids: !!v.kids, category: v.category || '', channel: v.channel, short: !!v.short, customThumb: v.customThumb || null };
+}
+function editDirty() {
+  const v = state.videos[editDraft.id];
+  const a = editFields(v), d = editDraft;
+  return Object.keys(a).some((k) => k === 'tags' ? parseTags(d.tags).join(' ') !== parseTags(a.tags).join(' ') : String(d[k] ?? '') !== String(a[k] ?? ''));
+}
+function renderEdit(id) {
   const v = state.videos[id];
-  openSheet(`<h3>Edit details</h3>
-    <div class="field"><label>Title</label><input type="text" id="ev-title" value="${esc(v.title)}"></div>
-    <div class="field"><label>Channel</label><input type="text" id="ev-ch" value="${esc(v.channel)}"></div>
-    <div class="field"><label>Category</label><select id="ev-cat">${categoryOptions(v.category)}</select></div>
-    <div class="field hidden" id="ev-newcat-wrap"><input id="ev-newcat" type="text" placeholder="Category name"></div>
-    <label class="check"><input type="checkbox" id="ev-short" ${v.short ? 'checked' : ''}> This is a Short</label>
-    <div class="row"><button class="btn" data-x="cancel">Cancel</button><button class="btn red" data-x="go">Save</button></div>`, (s) => {
-    $('#ev-cat', s).addEventListener('change', (e) => $('#ev-newcat-wrap', s).classList.toggle('hidden', e.target.value !== '__new'));
+  if (!v) return renderHome();
+  if (!editDraft || editDraft.id !== id) editDraft = { id, more: false, ...editFields(v) };
+  const d = editDraft, vis = VISIBILITY[d.visibility];
+  return `<header class="topbar"><button class="icon-btn" data-action="edit-cancel" aria-label="Back">${icon('back')}</button>
+      <div class="page-title">Edit video</div><button class="save-pill" data-action="edit-save" ${editDirty() ? '' : 'disabled'}>Save</button></header>
+    <div class="edit-thumb ${d.short ? 'tall' : ''}"><img src="${d.customThumb || baseThumb(v)}" alt="Thumbnail">
+      <label class="thumb-change" aria-label="Change thumbnail">${icon('imgplus')}<input type="file" accept="image/*" hidden data-edit-thumb></label>
+      ${d.customThumb ? '<button class="thumb-reset" data-action="edit-thumb-reset">Use original</button>' : ''}</div>
+    <label class="edit-field"><span>Title</span><input id="ed-title" data-ed="title" maxlength="100" value="${esc(d.title)}"></label>
+    <label class="edit-field"><span>Description</span><textarea id="ed-desc" data-ed="description" maxlength="5000" placeholder="Tell viewers about your video">${esc(d.description)}</textarea></label>
+    <label class="edit-field"><span>Hashtags</span><input id="ed-tags" data-ed="tags" placeholder="#funny #skate #2026" value="${esc(d.tags)}" autocapitalize="off"></label>
+    <div class="tag-chips" id="ed-tag-chips">${tagChips(d.tags)}</div>
+    <button class="edit-row" data-action="edit-visibility">${icon(vis[0])}<div><small>Visibility</small><b>${vis[1]}</b></div>${icon('right')}</button>
+    <button class="edit-row" data-action="edit-audience">${icon('people')}<div><small>Audience</small><b>${d.kids ? "Yes, it's made for kids" : "No, it's not made for kids"}</b></div>${icon('right')}</button>
+    ${d.more ? `
+      <label class="edit-field"><span>Category</span><select id="ed-cat" data-ed="category">${categoryOptions(d.category)}</select></label>
+      <label class="edit-field hidden" id="ed-newcat-wrap"><span>New category</span><input id="ed-newcat" data-ed="newcat" placeholder="Category name"></label>
+      <label class="edit-field"><span>Channel</span><input id="ed-ch" data-ed="channel" value="${esc(d.channel)}"></label>
+      <label class="edit-row toggle">${icon('shorts')}<div><small>Format</small><b>Show as a Short</b></div><input type="checkbox" data-ed="short" ${d.short ? 'checked' : ''}></label>
+      <button class="edit-row danger" data-action="edit-delete">${icon('trash')}<div><b>${v.local ? 'Delete from phone' : 'Remove from library'}</b></div></button>` :
+      `<button class="show-more" data-action="edit-more">Show more ${icon('down')}</button>`}`;
+}
+const tagChips = (text) => parseTags(text).map((t) => `<span class="tag-chip">#${esc(t)}</span>`).join('');
+function updateEditBar() {
+  const b = $('[data-action="edit-save"]');
+  if (b) b.disabled = !editDirty();
+}
+function leaveEdit() {
+  editDraft = null;
+  if (history.length > 1) history.back(); else location.hash = '#you';
+}
+function saveEdit() {
+  const d = editDraft, v = state.videos[d.id];
+  Object.assign(v, {
+    title: d.title.trim() || v.title, description: d.description.trim(), tags: parseTags(d.tags),
+    visibility: d.visibility, kids: d.kids, category: d.category, channel: d.channel.trim() || v.channel,
+    short: d.short, customThumb: d.customThumb || undefined,
+  });
+  save(true);
+  if (current === d.id) renderPlayerBody();
+  toast('Video updated');
+  leaveEdit();
+}
+// Crops an image to the video's shape and keeps it small enough to store.
+function makeThumb(file, tall) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const W = tall ? 360 : 640, H = tall ? 640 : 360;
+      const scale = Math.max(W / img.width, H / img.height);
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      c.getContext('2d').drawImage(img, (W - img.width * scale) / 2, (H - img.height * scale) / 2, img.width * scale, img.height * scale);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+function choiceSheet(title, options, selected, onPick) {
+  openSheet(`<h3>${esc(title)}</h3>${options.map(([value, ic, label, desc]) => `
+    <button class="opt choice ${value === selected ? 'on' : ''}" data-v="${value}">${icon(ic)}<div><b>${esc(label)}</b><div class="sub">${esc(desc)}</div></div><span class="radio"></span></button>`).join('')}`, (s) => {
     s.addEventListener('click', (e) => {
-      const x = e.target.closest('[data-x]')?.dataset.x;
-      if (x === 'cancel') closeSheet();
-      if (x !== 'go') return;
-      let cat = $('#ev-cat', s).value;
-      if (cat === '__new') cat = $('#ev-newcat', s).value.trim();
-      Object.assign(v, { title: $('#ev-title', s).value.trim() || v.title, channel: $('#ev-ch', s).value.trim() || v.channel, category: cat, short: $('#ev-short', s).checked });
-      save(); closeSheet(); rerender();
-      if (current === id) renderPlayerBody();
+      const b = e.target.closest('[data-v]');
+      if (!b) return;
+      closeSheet();
+      onPick(b.dataset.v);
     });
   });
 }
+document.addEventListener('input', (e) => {
+  const key = e.target.dataset?.ed;
+  if (!key || !editDraft) return;
+  if (key === 'short') editDraft.short = e.target.checked;
+  else if (key === 'category') {
+    $('#ed-newcat-wrap')?.classList.toggle('hidden', e.target.value !== '__new');
+    editDraft.category = e.target.value === '__new' ? ($('#ed-newcat')?.value.trim() || '') : e.target.value;
+  } else if (key === 'newcat') editDraft.category = e.target.value.trim();
+  else editDraft[key] = e.target.value;
+  if (key === 'tags') $('#ed-tag-chips').innerHTML = tagChips(editDraft.tags);
+  if (key === 'short') { rerender(); return; }
+  updateEditBar();
+});
+document.addEventListener('change', async (e) => {
+  if (!e.target.matches('[data-edit-thumb]') || !editDraft) return;
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    editDraft.customThumb = await makeThumb(f, editDraft.short);
+    rerender();
+  } catch { toast('That image could not be opened'); }
+});
 
 // YouTube-style comments: Top/Newest, likes, replies in threads, Read more.
 // They're your own notes, so they're private and stored on this phone.
@@ -1461,6 +1591,27 @@ document.addEventListener('click', (e) => {
 
   switch (d.action) {
     case 'add': addSheet(); break;
+    case 'edit-cancel': leaveEdit(); break;
+    case 'edit-current': if (current) { const id = current; setPlayerMode('mini'); location.hash = '#edit/' + id; } break;
+    case 'edit-save': saveEdit(); break;
+    case 'edit-more': editDraft.more = true; rerender(); break;
+    case 'edit-thumb-reset': editDraft.customThumb = null; rerender(); break;
+    case 'edit-visibility':
+      choiceSheet('Visibility', Object.entries(VISIBILITY).map(([k, [ic, label, desc]]) => [k, ic, label, desc]), editDraft.visibility,
+        (val) => { editDraft.visibility = val; rerender(); });
+      break;
+    case 'edit-audience':
+      choiceSheet('Audience', [
+        ['no', 'people', "No, it's not made for kids", 'Comments stay on'],
+        ['yes', 'people', "Yes, it's made for kids", 'Comments are turned off, like on YouTube'],
+      ], editDraft.kids ? 'yes' : 'no', (val) => { editDraft.kids = val === 'yes'; rerender(); });
+      break;
+    case 'edit-delete': {
+      const id = editDraft.id, v = state.videos[id];
+      confirmSheet(v.local ? `Delete “${v.title}” from this phone?` : `Remove “${v.title}” from your library?`, v.local ? 'Delete' : 'Remove', () => { editDraft = null; removeVideo(id); location.hash = '#you'; });
+      break;
+    }
+    case 'desc-toggle': if (!e.target.closest('a')) t.classList.toggle('open'); break;
     case 'shuffle': view.shuffle = !view.shuffle; rerender(); break;
     case 'manage-subs': manageSubsSheet(); break;
     case 'edit-profile': editProfileSheet(); break;
