@@ -204,8 +204,10 @@ svg { display: block; }
 #tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; }
 #tabbar .ico svg { width: 24px; height: 24px; }
 #tabbar a.active .ico svg { fill: currentColor; }
-.add-btn { justify-self: center; width: 46px; height: 46px; border-radius: 50%; background: var(--accent-grad); color: #fff; display: grid; place-items: center; box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 45%, transparent); }
-.add-btn svg { width: 26px; height: 26px; }
+.add-btn { justify-self: center; width: 52px; height: 52px; border-radius: 50%; background: #3a3a3a; color: #fff; display: grid; place-items: center; }
+:root[data-theme="light"] .add-btn { background: #e5e5e5; color: #0f0f0f; }
+#tabbar .add-btn svg { width: 34px; height: 34px; }
+#tabbar .add-btn svg path { stroke-width: 2.4; }
 .avatar-slot .avatar { width: 24px; height: 24px; font-size: 11px; }
 #tabbar a.active .avatar-slot .avatar { outline: 2px solid var(--fg); outline-offset: 1px; }
 
@@ -705,6 +707,6 @@ body.comic .av-64, body.comic .av-88, body.comic .ch-av > .avatar { box-shadow: 
 body.comic .title, body.comic h1, body.comic .page-title { text-shadow: 1px 1px 0 #000; }
 body.comic #tabbar { border-top-color: transparent; }
 body.comic #tabbar::before { content: ""; position: absolute; left: -6px; right: -6px; top: -2px; border-top: 3px solid var(--ink); filter: url(#sketch); pointer-events: none; }
-body.comic .add-btn { background: transparent; color: var(--ink); box-shadow: none; }
+body.comic .add-btn { box-shadow: none; }
 body.comic .add-btn::after { border-radius: 50%; }
 body.comic .comic-btn.on { background: var(--hi); }
