@@ -249,11 +249,131 @@ async function fetchMeta(id, short) {
 let toastTimer;
 function toast(msg) {
   const t = $('#toast');
+  t.classList.remove('show');
+  void t.offsetWidth; // restart the bounce when toasts come back to back
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
+
+// ---------------------------------------------------------------- effects
+// Particle bursts drawn in a layer above everything, animated with the Web Animations API.
+const fxLayer = document.createElement('div');
+fxLayer.id = 'fx-layer';
+document.body.appendChild(fxLayer);
+const FX_ICON = { pop: '💥', hearts: '❤️', confetti: '🎉', stars: '⭐', fire: '🔥', fireworks: '🎆', off: '🚫' };
+const LIKE_FX = { pop: 'Pop', hearts: 'Hearts', confetti: 'Confetti', stars: 'Stars', fire: 'Fire', off: 'Off' };
+const SUB_FX = { confetti: 'Confetti', fireworks: 'Fireworks', stars: 'Stars', hearts: 'Hearts', off: 'Off' };
+const CONFETTI = ['#ff3d6e', '#ffd36b', '#3ccf91', '#3ea6ff', '#b56bff', '#ff8a5c'];
+const rand = (a, b) => a + Math.random() * (b - a);
+const buzz = (ms = 12) => { try { navigator.vibrate?.(ms); } catch { /* not supported */ } };
+
+function particle(x, y, html, cls) {
+  const el = document.createElement('span');
+  el.className = 'fx-p ' + (cls || '');
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.innerHTML = html;
+  fxLayer.appendChild(el);
+  return el;
+}
+function fly(el, dx, dy, { dur = 900, spin = 0, gravity = 0, scale = 1, delay = 0 } = {}) {
+  const a = el.animate([
+    { transform: 'translate(-50%,-50%) scale(.3)', opacity: 1 },
+    { transform: `translate(calc(-50% + ${dx * 0.75}px), calc(-50% + ${dy * 0.75}px)) rotate(${spin * 0.6}deg) scale(${scale})`, opacity: 1, offset: 0.55 },
+    { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy + gravity}px)) rotate(${spin}deg) scale(${scale * 0.8})`, opacity: 0 },
+  ], { duration: dur, delay, easing: 'cubic-bezier(.15,.75,.3,1)', fill: 'both' });
+  a.onfinish = () => el.remove();
+}
+function ringAt(x, y, color, size = 70) {
+  const el = particle(x, y, '', 'fx-ring');
+  el.style.width = el.style.height = size + 'px';
+  el.style.borderColor = color;
+  el.animate([{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 0.9 }, { transform: 'translate(-50%,-50%) scale(1.6)', opacity: 0 }],
+    { duration: 600, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => el.remove();
+}
+function burstAt(x, y, kind) {
+  if (reduceMotion || kind === 'off' || !kind) return;
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff0033';
+  const radial = (n, html, opts = {}) => {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rand(-0.3, 0.3), r = rand(opts.min || 40, opts.max || 90);
+      fly(particle(x, y, typeof html === 'function' ? html(i) : html, opts.cls), Math.cos(a) * r, Math.sin(a) * r - (opts.lift || 0),
+        { dur: rand(650, 1000), spin: rand(-120, 120), gravity: opts.gravity || 0, scale: rand(0.8, 1.2) });
+    }
+  };
+  if (kind === 'pop') {
+    ringAt(x, y, accent);
+    radial(10, () => `<i style="background:${accent}"></i>`, { cls: 'dot', min: 30, max: 60 });
+  } else if (kind === 'hearts') {
+    ringAt(x, y, '#ff4f8b');
+    radial(9, (i) => ['❤️', '💖', '💕', '💗'][i % 4], { min: 40, max: 95, lift: 40, cls: 'emoji' });
+  } else if (kind === 'stars') {
+    ringAt(x, y, '#ffd36b');
+    radial(10, (i) => ['⭐', '✨', '🌟'][i % 3], { min: 45, max: 100, cls: 'emoji' });
+  } else if (kind === 'fire') {
+    for (let i = 0; i < 9; i++) fly(particle(x + rand(-14, 14), y, '🔥', 'emoji'), rand(-40, 40), rand(-130, -70), { dur: rand(700, 1100), scale: rand(0.8, 1.3) });
+  } else if (kind === 'confetti') {
+    ringAt(x, y, accent, 90);
+    for (let i = 0; i < 26; i++) {
+      const a = rand(-Math.PI, 0) + rand(-0.4, 0.4), r = rand(70, 170);
+      fly(particle(x, y, `<i style="background:${CONFETTI[i % CONFETTI.length]}"></i>`, 'confetti'),
+        Math.cos(a) * r, Math.sin(a) * r, { dur: rand(900, 1400), spin: rand(-540, 540), gravity: rand(90, 160) });
+    }
+  } else if (kind === 'fireworks') {
+    const spots = [[x, y], [x + rand(-110, -50), y - rand(90, 160)], [x + rand(50, 110), y - rand(110, 190)]];
+    spots.forEach(([fx, fy], k) => setTimeout(() => {
+      const color = CONFETTI[(k * 2) % CONFETTI.length];
+      ringAt(fx, fy, color, 60);
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2, r = rand(50, 85);
+        fly(particle(fx, fy, `<i style="background:${CONFETTI[(i + k) % CONFETTI.length]}"></i>`, 'dot spark'),
+          Math.cos(a) * r, Math.sin(a) * r, { dur: rand(800, 1100), gravity: 30 });
+      }
+    }, k * 220));
+  }
+}
+function burst(el, kind) {
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  burstAt(r.left + r.width / 2, r.top + r.height / 2, kind);
+}
+function floatText(el, text) {
+  if (reduceMotion || !el) return;
+  const r = el.getBoundingClientRect();
+  const t = particle(r.left + r.width / 2, r.top, text, 'fx-text');
+  t.animate([{ transform: 'translate(-50%,0) scale(.6)', opacity: 0 }, { transform: 'translate(-50%,-18px) scale(1.1)', opacity: 1, offset: 0.3 }, { transform: 'translate(-50%,-46px) scale(1)', opacity: 0 }],
+    { duration: 900, easing: 'ease-out' }).onfinish = () => t.remove();
+}
+function bigHeart(container) {
+  if (reduceMotion) return;
+  const r = container.getBoundingClientRect();
+  const h = particle(r.left + r.width / 2, r.top + r.height / 2, '❤️', 'fx-bigheart');
+  h.animate([{ transform: 'translate(-50%,-50%) scale(0) rotate(-15deg)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.25) rotate(8deg)', opacity: 1, offset: 0.3 },
+    { transform: 'translate(-50%,-50%) scale(1) rotate(0)', opacity: 1, offset: 0.6 }, { transform: 'translate(-50%,-120%) scale(.8)', opacity: 0 }],
+    { duration: 900, easing: 'ease-out' }).onfinish = () => h.remove();
+  burstAt(r.left + r.width / 2, r.top + r.height / 2, 'hearts');
+}
+
+// A soft ripple from the finger on every button, card and link.
+document.addEventListener('pointerdown', (e) => {
+  if (reduceMotion) return;
+  const el = e.target.closest('button, a, .thumb, label.btn, label.pill-btn, label.night-btn, label.cozy-drop, .style-opt, .swatch');
+  if (!el || el.disabled || e.target.closest('.short .frame, #yt-host')) return;
+  const r = el.getBoundingClientRect();
+  if (r.width * r.height > 300000) return;
+  const wrap = document.createElement('span');
+  wrap.className = 'ripple-wrap';
+  Object.assign(wrap.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', borderRadius: getComputedStyle(el).borderRadius });
+  const dot = document.createElement('span');
+  dot.className = 'ripple';
+  const size = Math.hypot(r.width, r.height) * 2;
+  Object.assign(dot.style, { width: size + 'px', height: size + 'px', left: e.clientX - r.left - size / 2 + 'px', top: e.clientY - r.top - size / 2 + 'px' });
+  wrap.appendChild(dot);
+  fxLayer.appendChild(wrap);
+  dot.animate([{ transform: 'scale(0)', opacity: 0.32 }, { transform: 'scale(1)', opacity: 0 }], { duration: 600, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => wrap.remove();
+}, { passive: true });
 
 const allVideos = () => Object.values(state.videos).sort((a, b) => b.addedAt - a.addedAt);
 const isSub = (ch) => state.subs.some((s) => s.name === ch);
@@ -271,6 +391,13 @@ function likesOf(id) {
 }
 const viewsShort = (id) => { const n = viewsOf(id); return n == null ? '' : '▷' + fmtCount(n); };
 const viewsLong = (id) => { const n = viewsOf(id); return n == null ? '' : `${fmtCount(n)} view${n === 1 ? '' : 's'}`; };
+// Your own like is added on top of YouTube's count so tapping Like visibly ticks up.
+const likesShort = (id) => {
+  const v = state.videos[id];
+  const n = v?.local ? 0 : state.stats[id]?.likes;
+  const total = (n || 0) + (state.liked.includes(id) && !v?.local ? 1 : 0) + (v?.local && state.liked.includes(id) ? 1 : 0);
+  return total ? fmtCount(total) : '';
+};
 const likesLong = (id) => { const n = likesOf(id); return n == null ? '' : `${fmtCount(n)} like${n === 1 ? '' : 's'}`; };
 
 const statsQueue = new Set();
@@ -308,6 +435,7 @@ function paintStats(id, animate) {
   document.querySelectorAll(`[data-views="${id}"]`).forEach((el) => { el.textContent = viewsShort(id); });
   document.querySelectorAll(`[data-views-long="${id}"]`).forEach((el) => countUp(el, viewsOf(id), viewsLong(id), animate));
   document.querySelectorAll(`[data-likes-long="${id}"]`).forEach((el) => countUp(el, likesOf(id), likesLong(id), animate));
+  document.querySelectorAll(`[data-likes-short="${id}"]`).forEach((el) => { el.textContent = likesShort(id); });
 }
 // Rolls a number up from zero, then settles on the formatted label.
 function countUp(el, n, finalText, animate) {
@@ -654,7 +782,17 @@ function setupShorts() {
             const vid = document.createElement('video');
             Object.assign(vid, { src: url, loop: true, playsInline: true, autoplay: true });
             // Tap to pause / play, and to unmute if the browser forced it muted.
-            vid.addEventListener('click', () => { if (vid.muted) { vid.muted = false; return; } vid.paused ? vid.play() : vid.pause(); });
+            // Tap to pause, double-tap to like (with a big heart), like YouTube Shorts.
+            let tapTimer = 0;
+            vid.addEventListener('click', () => {
+              if (tapTimer) {
+                clearTimeout(tapTimer); tapTimer = 0;
+                if (!state.liked.includes(id)) { toggleLike(id); el.querySelector('[data-act-like]')?.classList.add('on'); }
+                bigHeart(frame); buzz(15);
+                return;
+              }
+              tapTimer = setTimeout(() => { tapTimer = 0; if (vid.muted) { vid.muted = false; return; } vid.paused ? vid.play() : vid.pause(); }, 260);
+            });
             frame.appendChild(vid);
             vid.play().catch(() => { vid.muted = true; vid.play().catch(() => {}); });
           });
@@ -758,7 +896,9 @@ function route(animate) {
   }
   if (page !== 'edit') editDraft = null;
   if (page !== 'profile' && profDraft) { profDraft = null; applyTheme(); }
-  main.classList.toggle('enter', !!animate && !reduceMotion);
+  const push = ['history', 'liked', 'later', 'library', 'files', 'playlists', 'playlist', 'channel', 'edit', 'profile', 'manage', 'search'].includes(page);
+  main.classList.toggle('enter', !!animate && !reduceMotion && !push);
+  main.classList.toggle('push', !!animate && !reduceMotion && push);
   main.innerHTML = html;
   const tab = page === 'channel' && arg === state.profile.name ? 'you' : { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit', 'profile', 'manage'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
@@ -950,8 +1090,7 @@ function renderPlayerBody(animate) {
         ? `<button class="pill-btn bell" data-act-sub="${esc(v.channel)}" aria-label="Subscribed — tap to unsubscribe">${icon('bell')}${icon('down')}</button>`
         : `<button class="sub-btn" data-act-sub="${esc(v.channel)}">Subscribe</button>`}
       <div class="spacer"></div>
-      <button class="icon-btn ${liked ? 'on' : ''}" data-act-like="${v.id}" aria-label="Like">${icon('like')}</button>
-      <button class="icon-btn ${disliked ? 'on' : ''}" data-act-dislike="${v.id}" aria-label="Dislike">${icon('dislike')}</button>
+      <div class="like-pill"><button class="${liked ? 'on' : ''}" data-act-like="${v.id}" aria-label="Like" aria-pressed="${liked}">${icon('like')}<span data-likes-short="${v.id}">${likesShort(v.id)}</span></button><span class="sep"></span><button class="${disliked ? 'on' : ''}" data-act-dislike="${v.id}" aria-label="Dislike" aria-pressed="${disliked}">${icon('dislike')}</button></div>
       <button class="icon-btn" data-act-share="${v.id}" aria-label="Share">${icon('share')}</button>
       <button class="icon-btn ${later ? 'on' : ''}" data-act-later="${v.id}" aria-label="Watch later">${icon('clock')}</button>
       <button class="icon-btn" data-menu="${v.id}" aria-label="More">${icon('more')}</button>
@@ -984,11 +1123,17 @@ $('#mini-toggle').addEventListener('click', (e) => {
 function openSheet(html, onMount) {
   const root = $('#sheet-root');
   root.innerHTML = `<div class="scrim"><div class="sheet" role="dialog"><div class="grab"></div>${html}</div></div>`;
-  const scrim = $('.scrim', root);
+  const scrim = $('.scrim:not(.closing)', root);
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeSheet(); });
   onMount && onMount($('.sheet', root));
 }
-function closeSheet() { $('#sheet-root').innerHTML = ''; }
+function closeSheet() {
+  const scrim = $('#sheet-root .scrim');
+  if (!scrim) return;
+  if (reduceMotion) { scrim.remove(); return; }
+  scrim.classList.add('closing');
+  setTimeout(() => scrim.remove(), 220);
+}
 
 function videoMenu(id) {
   const v = state.videos[id];
@@ -1118,6 +1263,7 @@ function addSheet(prefill = '') {
       if (links.length) n += await addVideos(links, { category: cat(), subscribe: $('#add-sub', s).checked, allShort });
       closeSheet();
       toast(n ? `Imported ${n} video${n === 1 ? '' : 's'} 🎉` : 'Nothing was imported');
+      if (n) burstAt(innerWidth / 2, innerHeight * 0.55, 'confetti');
       if (staged.length && n) { view.homeChip = 'Your uploads'; if (location.hash !== '#home') { location.hash = '#home'; return; } }
       rerender();
     });
@@ -1342,6 +1488,8 @@ function commentsSheet(id) {
       inp.value = '';
       save(); draw();
       if (!rep) listEl.scrollTop = 0;
+      burst($('.cm-send', s), 'stars');
+      buzz(10);
     };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') post(); });
     s.addEventListener('click', (e) => {
@@ -1367,7 +1515,11 @@ function commentsSheet(id) {
         save(); toast('Comment deleted');
       }
       draw();
-      if (d.clike || d.cdis) pop(s.querySelector(`[data-${d.clike ? 'clike' : 'cdis'}="${d.clike || d.cdis}"]`));
+      if (d.clike || d.cdis) {
+        const el = s.querySelector(`[data-${d.clike ? 'clike' : 'cdis'}="${d.clike || d.cdis}"]`);
+        pop(el);
+        if (d.clike && findComment(id, d.clike)?.c.liked) burst(el, state.settings.likeFx || 'pop');
+      }
     });
     draw();
   });
@@ -1532,6 +1684,7 @@ function saveProfile() {
   state.settings.accent = d.accent;
   save(true);
   toast('Profile saved ✨');
+  burstAt(innerWidth / 2, innerHeight * 0.4, 'stars');
   leaveProfile();
 }
 function cropImage(file, w, h, quality = 0.8) {
@@ -1571,17 +1724,36 @@ document.addEventListener('change', async (e) => {
 function settingsSheet() {
   const st = state.settings;
   openSheet(`<h3>Settings</h3>
-    <label class="check">${icon('moon')}<span style="flex:1">Dark theme</span><input type="checkbox" id="st-dark" ${st.theme === 'dark' ? 'checked' : ''}></label>
-    <label class="check">${icon('play')}<span style="flex:1">Autoplay next video</span><input type="checkbox" id="st-auto" ${st.autoplay ? 'checked' : ''}></label>
-    <label class="check">${icon('zap')}<span style="flex:1">Comic style (hand-drawn outlines)</span><input type="checkbox" id="st-comic" ${st.comic ? 'checked' : ''}></label>
+    <div class="set-group">
+      <label class="check">${icon('moon')}<span style="flex:1">Dark theme</span><input class="switch" type="checkbox" id="st-dark" ${st.theme === 'dark' ? 'checked' : ''}></label>
+      <label class="check">${icon('play')}<span style="flex:1">Autoplay next video</span><input class="switch" type="checkbox" id="st-auto" ${st.autoplay ? 'checked' : ''}></label>
+      <label class="check">${icon('zap')}<span style="flex:1">Comic style</span><input class="switch" type="checkbox" id="st-comic" ${st.comic ? 'checked' : ''}></label>
+    </div>
+    <div class="set-label">Like effect <span>tap to preview</span></div>
+    <div class="fx-picker">${Object.entries(LIKE_FX).map(([k, l]) => `<button class="fx-chip ${(st.likeFx || 'pop') === k ? 'on' : ''}" data-likefx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
+    <div class="set-label">Subscribe effect</div>
+    <div class="fx-picker">${Object.entries(SUB_FX).map(([k, l]) => `<button class="fx-chip ${(st.subFx || 'confetti') === k ? 'on' : ''}" data-subfx="${k}">${FX_ICON[k]} ${l}</button>`).join('')}</div>
+    <div class="set-group">
     <button class="opt" data-x="export">${icon('download')} Back up my library</button>
     <label class="opt" style="cursor:pointer">${icon('upload')} Restore from backup<input type="file" id="st-import" accept="application/json,.json" hidden></label>
     <button class="opt" data-x="clear">${icon('history')} Clear watch history</button>
     <button class="opt" data-x="reset" style="color:#ff4e45">${icon('trash')} Reset everything</button>
+    </div>
     <div class="hint">Your library is stored only on this device. The backup holds your library, playlists and profile, but not uploaded video files.</div>`, (s) => {
     $('#st-dark', s).addEventListener('change', (e) => { st.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); save(); });
     $('#st-auto', s).addEventListener('change', (e) => { st.autoplay = e.target.checked; save(); if (current) renderPlayerBody(); });
     $('#st-comic', s).addEventListener('change', (e) => { st.comic = e.target.checked; save(); applyTheme(); rerender(); });
+    s.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-likefx],[data-subfx]');
+      if (!b) return;
+      const key = b.dataset.likefx ? 'likeFx' : 'subFx';
+      st[key] = b.dataset.likefx || b.dataset.subfx;
+      save();
+      b.parentElement.querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      burst(b, st[key]);
+      pop(b);
+    });
     $('#st-import', s).addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1647,9 +1819,12 @@ function refreshAfterAction() {
   if (playerMode === 'full') { const y = $('#player').scrollTop; renderPlayerBody(); $('#player').scrollTop = y; }
   if (!location.hash.startsWith('#shorts')) rerender();
 }
-function pop(el) {
+function pop(el) { replay(el, 'pop'); }
+function shake(el) { replay(el, 'shake'); }
+function spin(el) { replay(el, 'spin'); }
+function replay(el, cls) {
   if (reduceMotion || !el) return;
-  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
 }
 
 document.addEventListener('change', async (e) => {
@@ -1682,14 +1857,31 @@ document.addEventListener('click', (e) => {
   if (d.actLike || d.actDislike || d.actLater) {
     const id = d.actLike || d.actDislike || d.actLater;
     if (d.actLike) toggleLike(id); else if (d.actDislike) toggleDislike(id); else toggleLater(id);
-    if (t.closest('.short')) { t.classList.toggle('on'); pop(t); return; }
-    refreshAfterAction();
-    pop($(`#player-body [data-act-${d.actLike ? 'like' : d.actDislike ? 'dislike' : 'later'}="${id}"]`));
+    const kind = d.actLike ? 'like' : d.actDislike ? 'dislike' : 'later';
+    const on = (kind === 'like' ? state.liked : kind === 'dislike' ? state.disliked : state.later).includes(id);
+    let el = t;
+    if (t.closest('.short')) t.classList.toggle('on', on);
+    else { refreshAfterAction(); el = $(`#player-body [data-act-${kind}="${id}"]`) || t; }
+    pop(el);
+    if (on && kind === 'like') { burst(el, state.settings.likeFx || 'pop'); floatText(el, '+1'); buzz(15); }
+    if (on && kind === 'dislike') shake(el);
+    if (on && kind === 'later') spin(el);
     return;
   }
   if (d.actShare) { share(d.actShare); return; }
   if (d.actPlaylist) { playlistSheet(d.actPlaylist); return; }
-  if (d.actSub) { const v = Object.values(state.videos).find((x) => x.channel === d.actSub); subscribeTo(d.actSub, v?.channelUrl); refreshAfterAction(); return; }
+  if (d.actSub) {
+    const v = Object.values(state.videos).find((x) => x.channel === d.actSub);
+    subscribeTo(d.actSub, v?.channelUrl);
+    refreshAfterAction();
+    if (isSub(d.actSub)) {
+      const el = (playerMode === 'full' && $(`#player-body [data-act-sub="${CSS.escape(d.actSub)}"]`)) || $(`#main [data-act-sub="${CSS.escape(d.actSub)}"]`) || t;
+      el.classList.add('just-subbed');
+      burst(el, state.settings.subFx || 'confetti');
+      buzz([12, 40, 18]);
+    }
+    return;
+  }
 
   switch (d.action) {
     case 'add': addSheet(); break;
