@@ -38,6 +38,9 @@ const ICONS = {
   link: 'M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
   imgplus: 'M14 4H4v16h16v-9M4 16l5-5 4 4 2-2 5 5M9 9.5a1.5 1.5 0 1 0 0-.01M18 2v6M15 5h6',
   hash: 'M5 9h15M4 15h15M10 3 8 21M16 3l-2 18',
+  shuffle: 'M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
+  cast: 'M3 8V5h18v14h-7M3 12a8 8 0 0 1 8 8M3 16a4 4 0 0 1 4 4M3 20h.01',
+  zap: 'M13 2 4 14h7l-1 8 9-12h-7z',
   sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   feed: 'M4 7h16v13H4zM8 4h8M12 10.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
@@ -454,12 +457,12 @@ function smallCard(v, k, wide) {
       <div class="title">${esc(v.title)}</div><div class="sub"><span>${chName(v)}</span>${wide ? viewsSpan(v.id) + `<span>${ago(v.addedAt)}</span>` : ''}</div></a>
       <button class="more" data-menu="${v.id}" aria-label="More">${icon('more')}</button></div></div>`;
 }
-function listRow(v, k, extra) {
+function listRow(v, k, extra, editable) {
   return `<div class="lrow">
     ${thumbBox(v, k)}
     <a class="text" data-play="${v.id}" data-ctx="${k}" href="#"><div class="title">${esc(v.title)}</div>
       <div class="sub"><span>${chName(v)}</span>${viewsSpan(v.id)}<span>${extra ?? ago(v.addedAt)}</span></div></a>
-    <button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button></div>`;
+    ${editable ? `<a class="more" href="#edit/${v.id}" aria-label="Edit video">${icon('edit')}</a>` : `<button class="more" data-menu="${v.id}" aria-label="More">${icon('moreV')}</button>`}</div>`;
 }
 function shortTile(v, width = 150) {
   return `<a class="hcard" href="#shorts/${v.id}" style="width:${width}px"><div class="thumb" style="aspect-ratio:9/16;border-radius:10px"><img loading="lazy" src="${thumb(v.id)}" alt="">${localBadge(v)}</div>
@@ -590,10 +593,10 @@ function pageHeader(title, extra = '') {
 function renderList(title, ids, opts = {}) {
   const vids = ids.map((id) => state.videos[id]).filter(Boolean);
   const k = ctx(vids.map((v) => v.id));
-  const playAll = vids.length ? `<div class="btn-row"><button class="btn red" data-play="${vids[0].id}" data-ctx="${k}">${icon('play')} Play all</button>
-    <button class="btn" data-action="shuffle-play" data-ctx="${k}">Shuffle</button></div>` : '';
-  return pageHeader(title, opts.extra || '') + (opts.top || '') + playAll +
-    (vids.length ? vids.map((v) => listRow(v, k, opts.sub ? opts.sub(v) : undefined)).join('') : empty(opts.icon || 'list', opts.empty || 'Nothing here yet.', opts.emptyBtn));
+  const playAll = vids.length ? `<div class="btn-row"><button class="btn red play-all" data-play="${vids[0].id}" data-ctx="${k}">${icon('play')} Play all</button>
+    <button class="btn" data-action="shuffle-play" data-ctx="${k}">${icon('shuffle')} Shuffle</button></div>` : '';
+  return (opts.header ?? pageHeader(title, opts.extra || '')) + (opts.top || '') + playAll +
+    (vids.length ? vids.map((v) => listRow(v, k, opts.sub ? opts.sub(v) : undefined, opts.editable)).join('') : empty(opts.icon || 'list', opts.empty || 'Nothing here yet.', opts.emptyBtn));
 }
 
 function renderFiles() {
@@ -682,18 +685,41 @@ function renderSearch(q) {
     ${!q ? empty('search', 'Search titles, channels and categories you\'ve saved — or paste a YouTube link to add it.') : ''}`;
 }
 
+function comicToggle() {
+  const on = !!state.settings.comic;
+  return `<button class="comic-btn ${on ? 'on' : ''}" data-action="toggle-comic" aria-pressed="${on}">${icon('zap')} Comic style${on ? ': on' : ''}</button>`;
+}
 function renderChannel(name) {
+  const p = state.profile;
   const sub = state.subs.find((s) => s.name === name);
+  const mine = name === p.name || allVideos().some((v) => v.local && v.channel === name);
   const vids = allVideos().filter((v) => v.channel === name);
-  const mine = vids.some((v) => v.local) || name === state.profile.name;
   const url = sub?.url || vids.find((v) => v.channelUrl)?.channelUrl;
   const totalViews = vids.reduce((n, v) => n + (viewsOf(v.id) || 0), 0);
-  const top = `<div class="profile">${mine ? profileAvatar(64) : avatar(name, 64)}<div style="flex:1;min-width:0"><h1 style="font-size:22px">${mine ? myName(name) : esc(name)}</h1>
-      <div class="sub">${vids.length} saved videos${totalViews ? ` · ${fmtCount(totalViews)} views` : ''}</div></div></div>
-    <div class="btn-row">${mine ? `<button class="btn" data-action="add" style="flex:1">${icon('upload')} Upload video</button>` :
-      `<button class="sub-btn ${sub ? 'on' : ''}" data-act-sub="${esc(name)}" style="flex:1">${sub ? 'Subscribed' : 'Subscribe'}</button>`}
-    ${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open on YouTube</a>` : ''}</div>`;
-  return renderList(name, vids.map((v) => v.id), { top, empty: mine ? 'Upload videos from your phone to fill your channel.' : 'No saved videos from this channel.' });
+  const header = `<header class="topbar"><button class="icon-btn" data-action="back" aria-label="Back">${icon('back')}</button>
+    <div class="page-title">${mine ? 'You' : esc(name)}</div>
+    <a class="icon-btn" href="#search" aria-label="Search">${icon('search')}</a>
+    <button class="icon-btn" data-action="settings" aria-label="Settings">${icon('gear')}</button></header>`;
+  const top = `<div class="ch-head">
+      <span class="ch-av">${mine ? profileAvatar(88) : avatar(name, 88)}</span>
+      <div class="ch-info"><h1>${mine ? myName(name) : esc(name)}</h1>
+        ${mine && (p.handle || p.pronouns) ? `<div class="handle">${esc(p.handle)}${p.pronouns ? ` · ${esc(p.pronouns)}` : ''}</div>` : ''}
+        <div class="sub">${vids.length} saved video${vids.length === 1 ? '' : 's'} • ${fmtCount(totalViews)} view${totalViews === 1 ? '' : 's'}</div></div>
+    </div>
+    <div class="btn-row">${mine
+      ? `<a class="btn outline" href="#manage">Manage videos</a><button class="btn outline" data-action="add">Create</button>`
+      : `<button class="sub-btn ${sub ? 'on' : ''}" data-act-sub="${esc(name)}" style="flex:1">${sub ? 'Subscribed' : 'Subscribe'}</button>
+         ${url ? `<a class="btn outline" href="${esc(url)}" target="_blank" rel="noopener">Open on YouTube</a>` : ''}`}</div>
+    <div class="comic-row">${comicToggle()}</div>`;
+  return renderList(name, vids.map((v) => v.id), { header, top, empty: mine ? 'Tap Create to upload your first video.' : 'No saved videos from this channel.' });
+}
+function renderManage() {
+  const p = state.profile;
+  const vids = allVideos().filter((v) => v.local || v.channel === p.name);
+  return renderList('Manage videos', vids.map((v) => v.id), {
+    editable: true, icon: 'film', empty: 'Your uploads will show up here.',
+    sub: (v) => { const vis = VISIBILITY[visOf(v)]; return `${vis[1]}${v.kids ? ' · Kids' : ''}`; },
+  });
 }
 
 // ---------------------------------------------------------------- router
@@ -727,13 +753,14 @@ function route(animate) {
     case 'channel': html = renderChannel(arg); break;
     case 'edit': html = renderEdit(arg); break;
     case 'profile': html = renderProfileEdit(); break;
+    case 'manage': html = renderManage(); break;
     default: html = renderHome();
   }
   if (page !== 'edit') editDraft = null;
   if (page !== 'profile' && profDraft) { profDraft = null; applyTheme(); }
   main.classList.toggle('enter', !!animate && !reduceMotion);
   main.innerHTML = html;
-  const tab = { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit', 'profile'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
+  const tab = page === 'channel' && arg === state.profile.name ? 'you' : { home: 'home', shorts: 'shorts', subs: 'subs', channel: 'subs' }[page] || (['you', 'history', 'liked', 'later', 'library', 'playlist', 'playlists', 'files', 'edit', 'profile', 'manage'].includes(page) ? 'you' : page === 'search' ? '' : 'home');
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   $('#tab-avatar').innerHTML = profileAvatar(28);
   document.body.classList.toggle('on-shorts', page === 'shorts');
@@ -1546,6 +1573,7 @@ function settingsSheet() {
   openSheet(`<h3>Settings</h3>
     <label class="check">${icon('moon')}<span style="flex:1">Dark theme</span><input type="checkbox" id="st-dark" ${st.theme === 'dark' ? 'checked' : ''}></label>
     <label class="check">${icon('play')}<span style="flex:1">Autoplay next video</span><input type="checkbox" id="st-auto" ${st.autoplay ? 'checked' : ''}></label>
+    <label class="check">${icon('zap')}<span style="flex:1">Comic style (hand-drawn outlines)</span><input type="checkbox" id="st-comic" ${st.comic ? 'checked' : ''}></label>
     <button class="opt" data-x="export">${icon('download')} Back up my library</button>
     <label class="opt" style="cursor:pointer">${icon('upload')} Restore from backup<input type="file" id="st-import" accept="application/json,.json" hidden></label>
     <button class="opt" data-x="clear">${icon('history')} Clear watch history</button>
@@ -1553,6 +1581,7 @@ function settingsSheet() {
     <div class="hint">Your library is stored only on this device. The backup holds your library, playlists and profile, but not uploaded video files.</div>`, (s) => {
     $('#st-dark', s).addEventListener('change', (e) => { st.theme = e.target.checked ? 'dark' : 'light'; applyTheme(); save(); });
     $('#st-auto', s).addEventListener('change', (e) => { st.autoplay = e.target.checked; save(); if (current) renderPlayerBody(); });
+    $('#st-comic', s).addEventListener('change', (e) => { st.comic = e.target.checked; save(); applyTheme(); rerender(); });
     $('#st-import', s).addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1665,6 +1694,10 @@ document.addEventListener('click', (e) => {
   switch (d.action) {
     case 'add': addSheet(); break;
     case 'edit-cancel': leaveEdit(); break;
+    case 'toggle-comic':
+      state.settings.comic = !state.settings.comic; save(); applyTheme(); rerender();
+      toast(state.settings.comic ? 'Comic style on 💥' : 'Comic style off');
+      break;
     case 'profile-cancel': leaveProfile(); break;
     case 'profile-save': saveProfile(); break;
     case 'profile-clear-images': profDraft.photo = ''; profDraft.banner = ''; rerender(); break;
@@ -1720,6 +1753,7 @@ document.addEventListener('keydown', (e) => {
 function applyTheme() {
   document.documentElement.dataset.theme = state.settings.theme;
   document.documentElement.style.setProperty('--accent', state.settings.accent || '#ff0033');
+  document.body.classList.toggle('comic', !!state.settings.comic);
   document.querySelector('meta[name=theme-color]').content = state.settings.theme === 'light' ? '#ffffff' : '#0f0f0f';
 }
 

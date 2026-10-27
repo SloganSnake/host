@@ -658,3 +658,53 @@ body:has(.cozy-night) #main { padding-bottom: calc(var(--nav-h) + var(--safe-b))
 @keyframes hop { 50% { transform: translateY(-5px); } }
 @keyframes drift { to { transform: translateX(18px); } }
 @keyframes bob { 50% { transform: translateX(-50%) rotate(-4deg) translateY(-3px); } }
+
+/* ---------- Channel page ---------- */
+.ch-head { display: flex; align-items: center; gap: 18px; padding: 18px 16px 14px; }
+.ch-av { flex: none; display: inline-grid; }
+.ch-av > .avatar { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--accent), 0 0 24px color-mix(in srgb, var(--accent) 55%, transparent); }
+.ch-info { min-width: 0; }
+.ch-info h1 { margin: 0; font-size: 30px; line-height: 1.15; overflow-wrap: anywhere; }
+.ch-info .handle { color: #a99cff; font-size: 14px; margin-top: 3px; }
+.ch-info .sub { font-size: 15px; margin-top: 6px; }
+.btn.outline { background: var(--bg-chip); box-shadow: inset 0 0 0 1.5px var(--line); }
+.comic-row { padding: 2px 16px 10px; }
+.comic-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: var(--bg-chip); font-weight: 700; font-size: 14px; }
+.comic-btn svg { width: 18px; height: 18px; }
+.comic-btn.on { background: #ffe600; color: #111; }
+
+/* ---------- Comic style: hand-drawn outlines, yellow ink, halftone dots ---------- */
+body.comic { --ink: #fff; --hi: #ffe600;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+:root[data-theme="light"] body.comic { --ink: #111; --hi: #b38600; }
+body.comic .btn, body.comic .sub-btn, body.comic .chip, body.comic .pill-btn, body.comic .comic-btn, body.comic .comments-card,
+body.comic .desc-box, body.comic .lib-item .stack, body.comic .add-btn, body.comic .save-pill, body.comic .show-more { position: relative; }
+body.comic .btn::after, body.comic .sub-btn::after, body.comic .chip::after, body.comic .pill-btn::after, body.comic .comic-btn::after,
+body.comic .comments-card::after, body.comic .desc-box::after, body.comic .lib-item .stack::after, body.comic .add-btn::after,
+body.comic .save-pill::after, body.comic .show-more::after, body.comic .thumb::after {
+  content: ""; position: absolute; inset: -2px; border: 3px solid var(--ink); border-radius: inherit; filter: url(#sketch); pointer-events: none;
+}
+/* A second, looser stroke on buttons for the inked look */
+body.comic .btn::before, body.comic .comic-btn::before {
+  content: ""; position: absolute; inset: -6px -4px -3px -6px; border: 2px solid var(--ink); border-radius: inherit; opacity: .8; filter: url(#sketch2); pointer-events: none;
+}
+body.comic .btn { border-radius: 16px; background: #3a3a3a; color: var(--hi); font-weight: 800;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+body.comic .btn svg { filter: drop-shadow(1.5px 1.5px 0 #000); }
+body.comic .btn.red, body.comic .btn.play-all, body.comic .btn.primary { background: #ffb81c; color: #111; text-shadow: none; }
+body.comic .btn.red::after, body.comic .btn.play-all::after, body.comic .btn.primary::after { border-color: #111; inset: 2px; }
+body.comic .btn.red svg, body.comic .btn.play-all svg { filter: none; }
+body.comic .chip.active { background: var(--hi); color: #111; }
+body.comic .thumb { border-radius: 10px; }
+body.comic .thumb::after { inset: 3px; border-width: 3px; }
+body.comic .thumb::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: .35; mix-blend-mode: multiply;
+  background: radial-gradient(circle, #000 1px, transparent 1.3px) 0 0 / 5px 5px; }
+body.comic .thumb .badge { z-index: 2; border: 1.5px solid #fff; }
+body.comic .avatar { box-shadow: 0 0 0 2px #111, 0 0 0 4px var(--hi), 0 0 12px 3px color-mix(in srgb, var(--hi) 45%, transparent); }
+body.comic .av-64, body.comic .av-88, body.comic .ch-av > .avatar { box-shadow: 0 0 0 4px #111, 0 0 0 8px var(--hi), 0 0 26px 8px color-mix(in srgb, var(--hi) 45%, transparent); }
+body.comic .title, body.comic h1, body.comic .page-title { text-shadow: 1px 1px 0 #000; }
+body.comic #tabbar { border-top-color: transparent; }
+body.comic #tabbar::before { content: ""; position: absolute; left: -6px; right: -6px; top: -2px; border-top: 3px solid var(--ink); filter: url(#sketch); pointer-events: none; }
+body.comic .add-btn { background: transparent; color: var(--ink); box-shadow: none; }
+body.comic .add-btn::after { border-radius: 50%; }
+body.comic .comic-btn.on { background: var(--hi); }
